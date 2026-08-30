@@ -116,6 +116,24 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
   En un test, retrasar solo la última fila no vence nada: la referencia es el
   máximo `fecha_accion` de la instancia.
 
+## Trampas del propio template
+
+- **El proxy del dev server debe cubrir cada prefijo del backend.** Una ruta
+  fuera de la lista de `vite.config.js` no da error: Vite devuelve el
+  `index.html` con un 200 y el cliente recibe HTML donde esperaba JSON. El
+  store valida la forma de la respuesta justo por esto.
+- **`node_modules` del contenedor es un volumen con nombre**, y Docker solo lo
+  puebla desde la imagen la primera vez. Tras añadir una dependencia, el
+  volumen viejo shadowea el nuevo; el `frontend.Dockerfile` lo detecta
+  comparando un marcador que vive DENTRO del volumen y reinstala solo.
+- **`make up` reconstruye siempre** (`--build`): sin eso, compose reutiliza la
+  imagen y los cambios del Dockerfile no llegan nunca al contenedor.
+- **Los tests de pantalla montan dentro de un `QLayout`.** Un `q-page` fuera de
+  un `QPageContainer` no renderiza, y un componente Quasar sin registrar
+  descarta sus slots con nombre: en ambos casos el wrapper sale vacío sin un
+  solo error. `tests/setup.js` registra los componentes a mano porque el
+  transform del plugin de Vite no aplica en tests.
+
 ## Comandos
 
 ```bash

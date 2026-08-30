@@ -66,7 +66,7 @@ que verifica existe. No hay objetivos decorativos que pasen sin comprobar nada.
 │   ├── apps/cuentas/          usuario, dependencias, adscripciones, roles
 │   ├── apps/tramite_ejemplo/  LA slice canónica
 │   └── tests/{unit,api}/
-├── frontend/           Vue 3 + Quasar + Vite + Pinia
+├── frontend/           Vue 3 + Quasar + Vite + Pinia + @aprendomx/sinpapel-vue
 ├── e2e/                Playwright
 └── ops/{docker,ci,deploy}/
 ```

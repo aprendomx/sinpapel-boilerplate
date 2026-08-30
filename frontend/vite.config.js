@@ -21,7 +21,7 @@ export default defineConfig({
     // El target sale del entorno porque cambia según dónde corra Vite: en
     // Docker el backend es el servicio `backend`, fuera es localhost.
     proxy: Object.fromEntries(
-      ['/sinpapel', '/salud', '/reports', '/admin', '/static'].map((ruta) => [
+      ['/api', '/sinpapel', '/salud', '/reports', '/admin', '/static'].map((ruta) => [
         ruta,
         { target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000', changeOrigin: true },
       ]),
@@ -31,5 +31,13 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['tests/**/*.test.js'],
+    setupFiles: ['tests/setup.js'],
+    server: {
+      deps: {
+        // La librería se distribuye como ESM ya construido; sin inlinarla,
+        // vitest no resuelve sus imports internos de Quasar.
+        inline: ['@aprendomx/sinpapel-vue'],
+      },
+    },
   },
 })

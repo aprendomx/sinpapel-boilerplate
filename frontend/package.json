@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aprendomx/sinpapel-vue": "^0.4.0",
     "axios": "^1.7.0",
     "pinia": "^3.0.0",
     "quasar": "^2.16.0",

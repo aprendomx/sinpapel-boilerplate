@@ -5,11 +5,16 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from config.api import router as router_dominio
 from config.views import salud
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("salud/", salud, name="salud"),
+    # API de dominio: CRUD del trámite y catálogos. Va en su propio prefijo
+    # para no colisionar con el SinpapelRouter, que publica el mismo modelo
+    # bajo /sinpapel/api/ con sus acciones de workflow.
+    path("api/tramite/", include(router_dominio.urls)),
     # API de flujos: available-transitions, transition, history, metadatos,
     # documentos, requisitos, sla-status + CRUD admin y portabilidad.
     path("sinpapel/api/", include("sinpapel_drf.urls")),

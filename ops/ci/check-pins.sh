@@ -32,12 +32,20 @@ done
 echo "→ pin declarado en frontend/package.json"
 if grep -q '"@aprendomx/sinpapel-vue": "\^0\.4\.' frontend/package.json; then
   echo "  ✓ @aprendomx/sinpapel-vue ^0.4.x"
-elif ! grep -q '@aprendomx/sinpapel-vue' frontend/package.json; then
-  echo "  · @aprendomx/sinpapel-vue todavía no se consume (entra con el frontend del trámite)"
 else
-  echo "  ✗ @aprendomx/sinpapel-vue fuera del rango ^0.4.x"
+  echo "  ✗ @aprendomx/sinpapel-vue ausente o fuera del rango ^0.4.x"
   fallos=$((fallos + 1))
 fi
+
+echo "→ versión realmente instalada en frontend/node_modules"
+instalada_vue="$(node -p "require('./frontend/node_modules/@aprendomx/sinpapel-vue/package.json').version" 2>/dev/null || echo "")"
+case "$instalada_vue" in
+  0.4.*) echo "  ✓ @aprendomx/sinpapel-vue ${instalada_vue}" ;;
+  "")    echo "  ✗ @aprendomx/sinpapel-vue no está instalado; corre 'make install'"
+         fallos=$((fallos + 1)) ;;
+  *)     echo "  ✗ @aprendomx/sinpapel-vue ${instalada_vue} — se esperaba la serie 0.4.x"
+         fallos=$((fallos + 1)) ;;
+esac
 
 echo "→ versiones realmente instaladas en backend/.venv"
 if [ -x backend/.venv/bin/python ]; then

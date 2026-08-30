@@ -128,6 +128,10 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # La bandeja de trámites crece sin techo: paginar desde el principio evita
+    # que una dependencia con años de expedientes tumbe la vista.
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 25,
 }
 
 # ─── sinpapel ────────────────────────────────────────────────────────────────

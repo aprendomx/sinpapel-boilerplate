@@ -20,7 +20,10 @@ install: ## Crea el venv del backend e instala dependencias (backend + frontend)
 	cd frontend && npm ci
 
 up: ## Levanta el stack completo (db + backend + frontend)
-	$(COMPOSE) up -d --wait
+	# --build no es opcional: sin él, compose reutiliza la imagen existente y
+	# los cambios en el Dockerfile o en las dependencias no llegan nunca al
+	# contenedor. Con la caché de capas cuesta segundos.
+	$(COMPOSE) up -d --build --wait
 	@echo "backend  http://localhost:8000/salud/"
 	@echo "frontend http://localhost:5173"
 
