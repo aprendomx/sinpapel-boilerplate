@@ -102,6 +102,19 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
   `user.username`. Para condicionar sobre otros campos del modelo, usa el
   backend `django_orm`.
 - **`deserialize_flujo` rechaza un `VersionFlujo` cuyo nombre ya existe.**
+- **`transition()` casi nunca lanza `ValueError`.** La documentación lo mapea a
+  400 para "estado destino inválido" o "arista inexistente", pero ambos casos
+  pasan por `puede_cambiar_estado` y salen como `PermissionError` — es decir,
+  403. Si escribes una vista propia, no esperes un `ValueError` que no llega.
+- **El payload saliente de `workflow.transition.completed` es plano**
+  (`estado_nuevo`, `target_object_id`, …). El envoltorio `data` es del formato
+  *entrante*, no del emitido.
+- **Los eventos salientes se encolan con `transaction.on_commit()`.** En un test
+  envuelto en transacción nunca corren: usa la fixture
+  `django_capture_on_commit_callbacks(execute=True)`.
+- **El SLA mide tiempo-en-estado** desde el `SeguimientoWorkflow` más reciente.
+  En un test, retrasar solo la última fila no vence nada: la referencia es el
+  máximo `fecha_accion` de la instancia.
 
 ## Comandos
 
@@ -120,4 +133,7 @@ make down      # detiene el stack
 
 El Makefile crece por fases: un target existe cuando lo que verifica es real.
 Nada de objetivos decorativos que pasan sin comprobar nada. Los gates activos
-hoy son `lint`, `migrations`, `test` y `audit`.
+hoy son `lint`, `migrations`, `test`, `api-roles`, `coverage` y `audit`.
+
+Faltan `parity`, `roundtrip`, `e2e` y `rename`: llegan con la fase que los hace
+verificables.

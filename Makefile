@@ -7,7 +7,8 @@ COMPOSE := docker compose --env-file .env -f ops/docker/docker-compose.yml
 PIP     := uv pip install --python backend/.venv
 
 .DEFAULT_GOAL := help
-.PHONY: help install up down db logs verify lint test migrations audit skills-sync clean
+.PHONY: help install up down db logs verify lint test migrations api-roles \
+        coverage audit skills-sync clean
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -36,7 +37,7 @@ logs: ## Sigue los logs del stack
 # `verify` es la única puerta: ningún trabajo se considera terminado sin que
 # pase entera. Cada gate es un check real, no un eco.
 
-verify: lint migrations test audit ## Corre todos los gates
+verify: lint migrations test api-roles coverage audit ## Corre todos los gates
 	@printf '\033[32m✓ make verify en verde\033[0m\n'
 
 lint: ## ruff (backend) + eslint (frontend)
@@ -51,6 +52,13 @@ migrations: ## Verifica que no haya migraciones sin generar
 test: ## Suite de tests (backend + frontend)
 	cd backend && .venv/bin/python -m pytest
 	cd frontend && npm run test
+
+api-roles: ## Cada endpoint responde 200/403 según el rol, para los cinco roles
+	cd backend && .venv/bin/python -m pytest tests/api -q
+
+coverage: ## Cobertura mínima del 85 % en la slice canónica
+	cd backend && .venv/bin/python -m pytest -q \
+		--cov=apps.tramite_ejemplo --cov-report=term-missing --cov-fail-under=85
 
 audit: ## Vulnerabilidades conocidas + integridad de los pines del ecosistema
 	# --skip-editable omite el propio backend, que se instala en modo editable

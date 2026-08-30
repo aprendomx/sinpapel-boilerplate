@@ -45,6 +45,8 @@ terminado sin que pase entera. Cada gate es una verificación real.
 | `lint` | `ruff check` + `ruff format --check` en el backend, `eslint` en el frontend |
 | `migrations` | `makemigrations --check --dry-run` limpio: no hay migraciones sin generar |
 | `test` | `pytest` (backend) y `vitest` (frontend) |
+| `api-roles` | Cada endpoint expuesto responde 200/403 según el rol, para los cinco roles |
+| `coverage` | Cobertura mínima del 85 % en `apps/tramite_ejemplo` |
 | `audit` | `pip-audit`, `npm audit` y la integridad de los pines del ecosistema |
 
 Los gates crecen con el proyecto: un target aparece en el Makefile cuando lo
@@ -59,9 +61,11 @@ que verifica existe. No hay objetivos decorativos que pasen sin comprobar nada.
 │   ├── flujos/         Verdad de los flujos, en JSON v0.2
 │   └── decisiones/     ADRs
 ├── backend/
-│   ├── config/         settings (base/dev/prod/test), urls, wsgi, asgi
-│   ├── apps/cuentas/   Usuario del sistema
-│   └── tests/
+│   ├── config/                settings (base/dev/prod/test), urls, wsgi, asgi
+│   ├── apps/core/             validadores y folios compartidos
+│   ├── apps/cuentas/          usuario, dependencias, adscripciones, roles
+│   ├── apps/tramite_ejemplo/  LA slice canónica
+│   └── tests/{unit,api}/
 ├── frontend/           Vue 3 + Quasar + Vite + Pinia
 ├── e2e/                Playwright
 └── ops/{docker,ci,deploy}/

@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "sinpapel_reports",
     # Apps de dominio
     "apps.cuentas",
+    "apps.tramite_ejemplo",
 ]
 
 MIDDLEWARE = [
@@ -138,8 +139,10 @@ SINPAPEL_SIGNATURE_BACKEND = "sinpapel.signing.backends.manual.ManualBackend"
 SINPAPEL_ALLOW_SERVER_SIGNING = False
 SINPAPEL_CACHE_ALIAS = "default"
 SINPAPEL_CACHE_TIMEOUT = 3600
-# Whitelist de módulos para predicados `python_path`. Sin ella el backend
-# rechaza todo. Se amplía cuando una app de dominio aporte predicados.
+# Whitelist de módulos para predicados `python_path`. Sin ella ese backend
+# rechaza todo. Vacía a propósito: las condiciones del trámite de ejemplo son
+# `json_logic`, que no importa código del proyecto. Amplíala solo si añades
+# predicados en Python, y apunta a módulos concretos, nunca a un paquete raíz.
 SINPAPEL_PREDICATE_MODULES: list[str] = []
 
 SINPAPEL_WEBHOOKS_BACKEND = env("SINPAPEL_WEBHOOKS_BACKEND", default="outbox")

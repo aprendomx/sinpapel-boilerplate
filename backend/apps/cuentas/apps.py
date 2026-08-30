@@ -4,4 +4,4 @@ from django.apps import AppConfig
 class CuentasConfig(AppConfig):
     name = "apps.cuentas"
     label = "cuentas"
-    verbose_name = "Cuentas y adscripciones"
+    verbose_name = "Cuentas, dependencias y adscripciones"

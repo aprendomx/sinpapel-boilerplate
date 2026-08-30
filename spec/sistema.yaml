@@ -17,5 +17,50 @@ sistema:
     Template ejecutable para construir sistemas de trámites sobre el framework
     sinpapel. Un despliegue por cliente (single-tenant).
 
-# Los actores, roles, dependencias y trámites se declaran conforme cada uno se
-# implementa: este archivo describe el sistema real, no un plan.
+# Roles del sistema. Se materializan como grupos de Django porque es lo que
+# consume `ConfiguracionTransicion.grupos_permitidos`: el motor valida contra
+# ellos antes de permitir una transición. Los siembra la migración
+# `cuentas/0003_seed_roles`.
+roles:
+  - clave: solicitante
+    nombre: Solicitante
+    descripcion: Presenta y da seguimiento a sus propias solicitudes.
+  - clave: ventanilla
+    nombre: Ventanilla
+    descripcion: Recibe solicitudes y coteja los requisitos documentales.
+  - clave: revisor
+    nombre: Persona revisora
+    descripcion: Analiza y resuelve solicitudes de su dependencia.
+  - clave: firmante
+    nombre: Persona firmante
+    descripcion: Firma electrónicamente las resoluciones favorables.
+  - clave: admin
+    nombre: Administración
+    descripcion: >-
+      Administra catálogos, flujos y configuración. Los endpoints de
+      administración se protegen con `IsAdminUser`, que mira el flag `is_staff`
+      de Django: tener el rol no basta si la cuenta no es de staff.
+
+# La visibilidad por área se resuelve con `Dependencia` y `Adscripcion` (FKs
+# normales en apps/cuentas), no con middleware de tenant ni schemas dinámicos.
+# El rol dice QUÉ puede hacer una persona; la adscripción, SOBRE QUÉ
+# expedientes. Las dependencias concretas son dato de cada despliegue y se
+# cargan por el admin, no se declaran aquí.
+dependencias:
+  modelo: apps.cuentas.Dependencia
+  jerarquica: true
+  nota: >-
+    Quien está adscrito a un área superior ve también los expedientes de las
+    subordinadas.
+
+# Trámites implementados. Cada uno vive en su propia app y su flujo en
+# spec/flujos/<clave>.json.
+tramites:
+  - clave: solicitud_constancia
+    nombre: Solicitud de Constancia
+    app: apps.tramite_ejemplo
+    flujo: spec/flujos/solicitud_constancia.json
+    descripcion: >-
+      Slice canónica del template. Ejercita todo el stack: predicados
+      json_logic, firma exigible, side effects, SLA, metadatos capturables,
+      requisitos documentales, webhooks y generación de documentos.

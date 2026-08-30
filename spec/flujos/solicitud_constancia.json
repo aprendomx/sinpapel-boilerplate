@@ -1,0 +1,213 @@
+{
+  "schema_version": "0.2",
+  "exported_at": "2026-08-30T00:00:00+00:00",
+  "catalogos": {
+    "etapas": [
+      {
+        "nombre": "Captura",
+        "descripcion": "La persona solicitante integra su expediente.",
+        "color": "#4DEFE2",
+        "orden": 1,
+        "activo": true
+      },
+      {
+        "nombre": "Revisión",
+        "descripcion": "La dependencia valida y resuelve la solicitud.",
+        "color": "#FFA500",
+        "orden": 2,
+        "activo": true
+      },
+      {
+        "nombre": "Resolución",
+        "descripcion": "Estados terminales del trámite.",
+        "color": "#00C853",
+        "orden": 3,
+        "activo": true
+      }
+    ],
+    "estados": [
+      {
+        "nombre": "BORRADOR",
+        "descripcion": "Solicitud en captura. Solo la persona solicitante la ve.",
+        "color": "#9E9E9E",
+        "icono": "edit_note",
+        "orden": 1,
+        "activo": true,
+        "etapa": "Captura",
+        "permite_expediente": true,
+        "expediente_obligatorio": false
+      },
+      {
+        "nombre": "RECIBIDA",
+        "descripcion": "Ventanilla acusó recibo y valida los requisitos documentales.",
+        "color": "#4DEFE2",
+        "icono": "inbox",
+        "orden": 2,
+        "activo": true,
+        "etapa": "Captura",
+        "permite_expediente": true,
+        "expediente_obligatorio": false
+      },
+      {
+        "nombre": "EN_REVISION",
+        "descripcion": "En análisis por la persona revisora.",
+        "color": "#FFA500",
+        "icono": "fact_check",
+        "orden": 3,
+        "activo": true,
+        "etapa": "Revisión",
+        "permite_expediente": true,
+        "expediente_obligatorio": false,
+        "slas": [
+          {
+            "dias_maximos": 5,
+            "accion_vencimiento": "alertar",
+            "configuracion_accion": {
+              "campo": "alerta_sla",
+              "valor": true
+            },
+            "activo": true
+          }
+        ]
+      },
+      {
+        "nombre": "APROBADA",
+        "descripcion": "Resuelta favorablemente y firmada electrónicamente.",
+        "color": "#00C853",
+        "icono": "verified",
+        "orden": 4,
+        "activo": true,
+        "etapa": "Resolución",
+        "permite_expediente": false,
+        "expediente_obligatorio": false
+      },
+      {
+        "nombre": "RECHAZADA",
+        "descripcion": "Resuelta desfavorablemente, con motivo asentado.",
+        "color": "#D32F2F",
+        "icono": "cancel",
+        "orden": 5,
+        "activo": true,
+        "etapa": "Resolución",
+        "permite_expediente": false,
+        "expediente_obligatorio": false
+      }
+    ],
+    "grupos": [
+      { "name": "solicitante" },
+      { "name": "ventanilla" },
+      { "name": "revisor" },
+      { "name": "firmante" }
+    ],
+    "tipos_documento": [
+      {
+        "nombre": "Identificación oficial",
+        "descripcion": "INE, pasaporte o cédula profesional vigente.",
+        "color": "#4DEFE2",
+        "orden": 1,
+        "activo": true
+      },
+      {
+        "nombre": "Comprobante de domicilio",
+        "descripcion": "Con antigüedad no mayor a tres meses.",
+        "color": "#4DEFE2",
+        "orden": 2,
+        "activo": true
+      },
+      {
+        "nombre": "Acuse de recepción",
+        "descripcion": "Lo genera el sistema al recibir la solicitud.",
+        "color": "#9E9E9E",
+        "orden": 3,
+        "activo": true
+      }
+    ]
+  },
+  "flujo": {
+    "nombre": "solicitud_constancia",
+    "descripcion": "Solicitud de Constancia. Flujo canónico del template.",
+    "activo": true,
+    "metadatos": {
+      "positions": {
+        "BORRADOR": { "x": 60, "y": 200 },
+        "RECIBIDA": { "x": 300, "y": 200 },
+        "EN_REVISION": { "x": 540, "y": 200 },
+        "APROBADA": { "x": 800, "y": 110 },
+        "RECHAZADA": { "x": 800, "y": 300 }
+      }
+    },
+    "transiciones": [
+      {
+        "estado_origen": "BORRADOR",
+        "estado_destino": "RECIBIDA",
+        "grupos_permitidos": ["solicitante"],
+        "requiere_firma": false
+      },
+      {
+        "estado_origen": "RECIBIDA",
+        "estado_destino": "EN_REVISION",
+        "grupos_permitidos": ["ventanilla"],
+        "requiere_firma": false,
+        "condiciones": [
+          {
+            "tipo": "json_logic",
+            "configuracion": {
+              "rule": {
+                "and": [
+                  { "==": [{ "var": "meta.requisitos_confirmados" }, true] },
+                  { "!=": [{ "var": "meta.curp" }, null] }
+                ]
+              }
+            },
+            "mensaje_error": "Ventanilla debe cotejar los requisitos y confirmar la CURP antes de enviar a revisión.",
+            "orden": 1,
+            "activo": true
+          }
+        ]
+      },
+      {
+        "estado_origen": "EN_REVISION",
+        "estado_destino": "APROBADA",
+        "grupos_permitidos": ["firmante"],
+        "requiere_firma": true
+      },
+      {
+        "estado_origen": "EN_REVISION",
+        "estado_destino": "RECHAZADA",
+        "grupos_permitidos": ["revisor"],
+        "requiere_firma": false,
+        "condiciones": [
+          {
+            "tipo": "json_logic",
+            "configuracion": {
+              "rule": { "!=": [{ "var": "meta.motivo_rechazo" }, null] }
+            },
+            "mensaje_error": "Asienta el motivo del rechazo antes de resolver.",
+            "orden": 1,
+            "activo": true
+          }
+        ]
+      }
+    ],
+    "requisitos": [
+      {
+        "estado": "RECIBIDA",
+        "tipo_documento": "Identificación oficial",
+        "porcentaje": 100,
+        "auto_carga": false
+      },
+      {
+        "estado": "RECIBIDA",
+        "tipo_documento": "Comprobante de domicilio",
+        "porcentaje": 100,
+        "auto_carga": false
+      },
+      {
+        "estado": "RECIBIDA",
+        "tipo_documento": "Acuse de recepción",
+        "porcentaje": 100,
+        "auto_carga": true
+      }
+    ]
+  }
+}
