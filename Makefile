@@ -7,8 +7,8 @@ COMPOSE := docker compose --env-file .env -f ops/docker/docker-compose.yml
 PIP     := uv pip install --python backend/.venv
 
 .DEFAULT_GOAL := help
-.PHONY: help install up down db logs verify lint test migrations api-roles \
-        coverage audit skills-sync clean
+.PHONY: help install up down db logs verify lint test migrations parity \
+        roundtrip api-roles coverage audit designer skills-sync clean
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -40,7 +40,7 @@ logs: ## Sigue los logs del stack
 # `verify` es la única puerta: ningún trabajo se considera terminado sin que
 # pase entera. Cada gate es un check real, no un eco.
 
-verify: lint migrations test api-roles coverage audit ## Corre todos los gates
+verify: lint migrations test parity roundtrip api-roles coverage audit ## Corre todos los gates
 	@printf '\033[32m✓ make verify en verde\033[0m\n'
 
 lint: ## ruff (backend) + eslint (frontend)
@@ -55,6 +55,13 @@ migrations: ## Verifica que no haya migraciones sin generar
 test: ## Suite de tests (backend + frontend)
 	cd backend && .venv/bin/python -m pytest
 	cd frontend && npm run test
+
+parity: ## La base coincide exactamente con spec/flujos/*.json
+	cd backend && .venv/bin/python -m pytest tests/parity/test_parity.py \
+		tests/parity/test_deteccion_deriva.py -q
+
+roundtrip: ## Export -> import de cada flujo no pierde ningún campo
+	cd backend && .venv/bin/python -m pytest tests/parity/test_roundtrip.py -q
 
 api-roles: ## Cada endpoint responde 200/403 según el rol, para los cinco roles
 	cd backend && .venv/bin/python -m pytest tests/api -q
@@ -74,6 +81,10 @@ audit: ## Vulnerabilidades conocidas + integridad de los pines del ecosistema
 
 # ─── Utilidades ──────────────────────────────────────────────────────────────
 
+designer: ## Construye sinpapel-designer en designer/dist/spa/
+	./ops/ci/build-designer.sh
+	@echo "Disponible en http://localhost:8000/designer/ (requiere staff)"
+
 skills-sync: ## Regenera .claude/skills/ desde aprendomx/sinpapel-skills
 	./ops/ci/skills-sync.sh
 
@@ -81,3 +92,4 @@ clean: ## Borra artefactos de build y caches
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf backend/.pytest_cache backend/.ruff_cache backend/htmlcov backend/.coverage
 	rm -rf frontend/dist frontend/node_modules/.vite
+	rm -rf designer/dist designer/DESIGNER_VERSION

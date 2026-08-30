@@ -40,11 +40,18 @@ make verify
 `make verify` es la única puerta del proyecto: ningún trabajo se considera
 terminado sin que pase entera. Cada gate es una verificación real.
 
+`parity` es el que impide la deriva: los flujos son datos, y su verdad vive en
+`spec/flujos/`. Si alguien añade una transición por el admin, toca la migración
+de siembra o edita el JSON sin volver a sembrar, el sistema en ejecución deja
+de ser el declarado en el repositorio y nada más lo detectaría.
+
 | Gate | Qué comprueba |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check` en el backend, `eslint` en el frontend |
 | `migrations` | `makemigrations --check --dry-run` limpio: no hay migraciones sin generar |
 | `test` | `pytest` (backend) y `vitest` (frontend) |
+| `parity` | La base de datos coincide exactamente con `spec/flujos/*.json` |
+| `roundtrip` | Export → import de cada flujo no pierde ningún campo |
 | `api-roles` | Cada endpoint expuesto responde 200/403 según el rol, para los cinco roles |
 | `coverage` | Cobertura mínima del 85 % en `apps/tramite_ejemplo` |
 | `audit` | `pip-audit`, `npm audit` y la integridad de los pines del ecosistema |
@@ -65,8 +72,10 @@ que verifica existe. No hay objetivos decorativos que pasen sin comprobar nada.
 │   ├── apps/core/             validadores y folios compartidos
 │   ├── apps/cuentas/          usuario, dependencias, adscripciones, roles
 │   ├── apps/tramite_ejemplo/  LA slice canónica
-│   └── tests/{unit,api}/
+│   ├── apps/spec_io/          import/export de flujos para el designer
+│   └── tests/{unit,api,parity}/
 ├── frontend/           Vue 3 + Quasar + Vite + Pinia + @aprendomx/sinpapel-vue
+├── designer/           sinpapel-designer embebido (make designer)
 ├── e2e/                Playwright
 └── ops/{docker,ci,deploy}/
 ```

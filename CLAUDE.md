@@ -22,8 +22,14 @@ v0.2 y se siembran por data migration leyendo ese JSON. Nunca declares un
 `Estado` ni una `ConfiguracionTransicion` directamente en Python fuera de esa
 migración, y nunca uses `models.CharField(choices=...)` para el estado.
 
-El gate `parity` compara lo sembrado contra el JSON y falla si divergen. Es lo
-que impide que un agente derive del diseño acordado.
+El gate `parity` exporta lo sembrado con la propia API de portabilidad del
+framework y lo compara, en forma canónica, contra el archivo. Es lo que impide
+que un agente derive del diseño acordado, y cubre todo lo que el schema v0.2
+sabe representar sin enumerarlo campo por campo.
+
+Editar un flujo es: descargar el JSON, editarlo (a mano o en el designer),
+guardarlo en `spec/flujos/` y **aplicarlo con una data migration**. Guardar el
+archivo no toca la base; `parity` falla mientras no coincidan.
 
 ### Nunca edites `.claude/skills/` a mano
 
@@ -151,7 +157,7 @@ make down      # detiene el stack
 
 El Makefile crece por fases: un target existe cuando lo que verifica es real.
 Nada de objetivos decorativos que pasan sin comprobar nada. Los gates activos
-hoy son `lint`, `migrations`, `test`, `api-roles`, `coverage` y `audit`.
+hoy son `lint`, `migrations`, `test`, `parity`, `roundtrip`, `api-roles`,
+`coverage` y `audit`.
 
-Faltan `parity`, `roundtrip`, `e2e` y `rename`: llegan con la fase que los hace
-verificables.
+Faltan `e2e` y `rename`: llegan con la fase que los hace verificables.

@@ -32,7 +32,13 @@ services:
       DJANGO_DEBUG: "true"
     volumes:
       - ../../backend:/app
+      # `spec/` es la verdad de los flujos. En desarrollo se monta con
+      # escritura para que el designer pueda guardar; en producción va
+      # read-only (`:ro`) y el guardado además queda deshabilitado por DEBUG.
       - ../../spec:/spec
+      # Bundle del designer, construido con `make designer`. Read-only: es un
+      # artefacto de build, el contenedor no debe tocarlo.
+      - ../../designer:/designer:ro
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:

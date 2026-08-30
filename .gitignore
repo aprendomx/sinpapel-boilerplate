@@ -19,6 +19,7 @@ htmlcov/
 node_modules/
 /frontend/dist/
 /designer/dist/
+/designer/DESIGNER_VERSION
 /e2e/test-results/
 /e2e/playwright-report/
 

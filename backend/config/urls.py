@@ -20,6 +20,9 @@ urlpatterns = [
     path("sinpapel/api/", include("sinpapel_drf.urls")),
     path("sinpapel/api/webhooks/", include("sinpapel_webhooks.urls")),
     path("reports/", include("sinpapel_reports.drf.urls")),
+    # Designer embebido y el intercambio de spec/flujos/*.json. Protegido:
+    # edita la definición de los trámites del sistema.
+    path("designer/", include("apps.spec_io.urls")),
 ]
 
 if settings.DEBUG:
