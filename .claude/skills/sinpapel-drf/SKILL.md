@@ -1,0 +1,275 @@
+---
+name: sinpapel-drf
+description: Usar siempre que el usuario exponga flujos sinpapel por API REST con Django REST Framework, instale sinpapel-drf, use expose_endpoints=True / endpoint_slug en @workflow_enabled, monte SinpapelRouter, llame los endpoints available-transitions / transition / history / preview-transition / metadatos / sla-status / documentos / requisitos, exporte / importe flujos por HTTP, o configure permisos sobre transiciones. Cubre la carga de documentos (InstanciaDocumento), el dispatch polimórfico de firma y el mapeo de errores.
+tested_against:
+  - sinpapel-drf==0.4.5
+  - sinpapel==0.8.3
+applies_to:
+  - "**/urls.py"
+  - "**/viewsets.py"
+  - "**/api/**/*.py"
+---
+
+# API REST con sinpapel-drf
+
+## Instalación
+
+```bash
+pip install "sinpapel-drf~=0.4.5"
+```
+
+`sinpapel-drf` requiere `sinpapel~=0.8.0` y `djangorestframework>=3.14`.
+Si no quieres CRUD admin de condiciones/SLAs, no instales el extra
+`[admin]` — los endpoints quedan disponibles solo si DRF está instalado.
+
+## INSTALLED_APPS
+
+```python
+INSTALLED_APPS = [
+    ...,
+    "simple_history",
+    "rest_framework",
+    "sinpapel",
+    "sinpapel_drf",   # ← este
+    "tu_app",
+]
+```
+
+## Habilitar endpoints por modelo
+
+```python
+# tu_app/models.py
+@workflow_enabled(
+    state_field="estado",
+    workflow_key="solicitud",
+    expose_endpoints=True,        # ← habilita auto-routing
+    endpoint_slug="solicitudes",  # opcional: default = workflow_key + "s"
+)
+class Solicitud(MetadatosCapturables, models.Model):
+    ...
+```
+
+`endpoint_slug` debe ser kebab-case `[a-z0-9-]+`. Sin él, la URL base será
+`workflow_key + "s"` (ej. `solicitud` → `/solicituds/` — explícita el slug
+para evitar pluralizaciones raras).
+
+## Montar las URLs
+
+```python
+# proyecto/urls.py
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("sinpapel/api/", include("sinpapel_drf.urls")),
+]
+```
+
+`sinpapel_drf.urls` monta:
+
+- `SinpapelRouter` (auto-itera `WorkflowRegistry.list_exposed()`).
+- `DefaultRouter` con `/condiciones/` y `/slas/`.
+- `/flujos/<pk>/export/` y `/flujos/import/`.
+
+## Endpoints por instancia (auto-generados)
+
+Para cada modelo con `expose_endpoints=True` se generan estas acciones en
+`<slug>`:
+
+| Método + URL | Acción | Permiso |
+|---|---|---|
+| `GET /<slug>/<pk>/available-transitions/` | Estados destino válidos. | `IsAuthenticated` |
+| `POST /<slug>/<pk>/preview-transition/` | Previsualiza una transición (desde 0.4.4 el response incluye `firma_requerida`). | `IsAuthenticated` |
+| `POST /<slug>/<pk>/transition/` | Ejecuta la transición. | `IsAuthenticated` (+ grupos vía engine) |
+| `GET /<slug>/<pk>/history/` | Historial paginado de simple-history. | `IsAuthenticated` |
+| `GET/PATCH /<slug>/<pk>/metadatos/` | Schema + valores; PATCH actualiza. | `IsAuthenticated` |
+| `GET/POST /<slug>/<pk>/documentos/` | Lista / sube `InstanciaDocumento`. (0.3.0) | `IsAuthenticated` |
+| `DELETE /<slug>/<pk>/documentos/<doc_id>/` | Borra una `InstanciaDocumento` del trámite. (0.3.0) | `IsAuthenticated` |
+| `GET /<slug>/<pk>/requisitos/` | Cumplimiento documental del estado actual. (0.3.0) | `IsAuthenticated` |
+| `POST /<slug>/<pk>/sla-status/` | Evalúa SLAs (puede mutar si `alertar`). | `IsAdminUser` |
+
+Detalle de payloads en `references/endpoints-reference.md`.
+
+**`preview-transition` desde sinpapel 0.6.0:** el método de instancia
+`instance.preview_transition(target_state, user)` ya está inyectado por
+`@workflow_enabled` (antes faltaba y forzaba a invocar
+`WorkflowEngine().preview_transition(...)` directamente como workaround). Un
+viewset propio puede volver al método de instancia. Además, su reporte ahora
+enforca requisitos documentales finos: `documentos_faltantes` puede traer
+entradas `{"tipo": "requisito_documento", ...}` y `POST /transition/` responde
+**403** (`PermissionError`) si un requisito no se satisface (ver
+`sinpapel-transitions`).
+
+## Carga y validación de documentos (desde 0.3.0)
+
+Tres endpoints typed sobre `InstanciaDocumento`, scoping todo por la GFK
+`target` al trámite (no se puede leer/borrar un documento de otra instancia).
+
+**Subir — `POST /<slug>/<pk>/documentos/`** (`multipart/form-data`). Acepta
+`archivo` (requerido) más `documento` (PK) **o** `tipo_documento` (PK):
+
+```bash
+curl -X POST -H "Authorization: Token <t>" \
+  -F "archivo=@comprobante.pdf" \
+  -F "tipo_documento=3" \
+  -F "porcentaje=100" \
+  -F 'metadatos={"folio":"A-12"}' \
+  https://host/sinpapel/api/solicitudes/42/documentos/
+```
+
+Regla de resolución por `tipo_documento`: debe existir **exactamente un**
+`Documento` de ese tipo. Si hay 0 o >1, el serializer responde **400**
+pidiendo `documento` explícito. `metadatos` viaja como string JSON (el
+`JSONField` de DRF lo parsea). El `autor`/`modificador` se setean con
+`request.user`. Respuesta `201` con `{id, documento, tipo_documento, archivo,
+porcentaje, creado}`.
+
+**Listar — `GET /<slug>/<pk>/documentos/`**: las `InstanciaDocumento` del
+trámite, `-creado` primero.
+
+**Borrar — `DELETE /<slug>/<pk>/documentos/<doc_id>/`**: `204`, o `404` si el
+documento no pertenece al trámite.
+
+**Requisitos — `GET /<slug>/<pk>/requisitos/`**: proyecta
+`WorkflowEngine.evaluar_requisitos_documentales(instance)` (misma fuente que
+el engine; sin lógica duplicada). Lista con dos niveles:
+
+```json
+[
+  {"nivel": "expediente", "satisfecho": false, "mensaje": "Se requiere..."},
+  {"nivel": "requisito_documento", "satisfecho": false,
+   "tipo_documento": "Identificación", "tipo_documento_id": 7,
+   "porcentaje_requerido": 100, "porcentaje_actual": 0, "auto_carga": false,
+   "mensaje": "Falta...",
+   "documentos_disponibles": [{"id": 3, "nombre": "Pasaporte"},
+                              {"id": 4, "nombre": "INE"}]}
+]
+```
+
+`porcentaje_actual = max(InstanciaDocumento.porcentaje)` del tipo ligado a la
+instancia (0 si no hay ninguno); `auto_carga=true ⇒ satisfecho=true` (lo
+genera el sistema). Úsalo para pintar un checklist antes de habilitar la
+transición — la **autoridad** sigue siendo el engine en `POST /transition/`.
+
+**Enriquecimiento de selects dependientes (v0.4.0, aditivo):** cada item de
+nivel `requisito_documento` incluye ahora `tipo_documento_id` (PK del tipo) y
+`documentos_disponibles` (`[{id, nombre}]` — los `Documento` de ese tipo). El
+engine ya exponía `tipo_documento_id`; el viewset adjunta
+`documentos_disponibles` con el helper `_attach_documentos_disponibles` (una
+sola query). Permite al cliente poblar un `<select>` de tipo y un `<select>`
+dependiente de documento (ej. tipo "Identificación" → "Pasaporte" / "INE") sin
+endpoints ni round-trips extra. No rompe consumidores existentes.
+
+## Endpoints admin (top-level)
+
+| Método + URL | Acción | Permiso |
+|---|---|---|
+| `CRUD /condiciones/` | `CondicionTransicionViewSet`. Filtros `?transicion=`, `?activo=`. | `IsAdminUser` |
+| `CRUD /slas/` | `SLAConfiguracionViewSet`. Filtros `?estado=`, `?activo=`. | `IsAdminUser` |
+| `POST /slas/verificar/` | Evaluación masiva de SLAs. | `IsAdminUser` |
+| `GET /flujos/<pk>/export/` | Descarga JSON v0.2. | `IsAdminUser` |
+| `POST /flujos/import/` | Importa JSON. `?dry_run=true` y `?activo=true`. | `IsAdminUser` |
+
+## Dispatch polimórfico de firma
+
+`POST /<slug>/<pk>/transition/` acepta `signature` con un de cuatro
+formas. El serializer `SignatureRequestSerializer` despacha al
+sub-serializer apropiado.
+
+> **Breaking (sinpapel-drf 0.4.0):** `TransitionRequestSerializer` eliminó el
+> campo `monto_aprobado` (alineado con su remoción en sinpapel 0.7.0). El body
+> de `transition` ya no lo acepta; usa metadatos o `condiciones` / `comentarios`
+> para datos de dominio.
+
+**FIEL — client-side (default y recomendado):**
+
+```json
+{
+  "target_state": "APROBADA",
+  "comentarios": "OK",
+  "signature": {
+    "backend": "fiel",
+    "mode": "client-side",
+    "firma_b64": "...",
+    "certificado_cer_b64": "..."
+  }
+}
+```
+
+**FIEL — server-side (gated por `SINPAPEL_ALLOW_SERVER_SIGNING=True`):**
+
+```bash
+curl -X POST -H "Authorization: Token <t>" \
+  -F "target_state=APROBADA" \
+  -F "signature[backend]=fiel" \
+  -F "signature[mode]=server-side" \
+  -F "signature[cer_file]=@firma.cer" \
+  -F "signature[key_file]=@firma.key" \
+  -F "signature[password]=••••" \
+  https://host/sinpapel/api/solicitudes/42/transition/
+```
+
+**Manual / Fake**: ver `references/endpoints-reference.md`.
+
+## Mapeo de errores
+
+`WorkflowViewSet` traduce las excepciones del motor a códigos HTTP:
+
+| Excepción | HTTP |
+|---|---|
+| `PermissionError` (grupos_permitidos, predicado, o requisito documental faltante desde 0.6.0) | 403 |
+| `ValueError` | 400 |
+| `SignatureValidationError` | 400 (`{"signature": [...]}`) |
+| `SignatureBackendNotConfiguredError` | 400 |
+| `django.core.exceptions.ValidationError` | 400 |
+
+Si escribes vistas propias en paralelo, replica este mapeo (`sinpapel-transitions`).
+
+## Schema OpenAPI
+
+`sinpapel-drf` soporta `drf-spectacular` vía extra `[openapi]`. Hay
+warnings conocidos en el polimorfismo de `SignatureRequestSerializer`
+(roadmap post-1.0). Para schemas estrictos, ajusta `OpenApiSerializerExtension`
+manualmente.
+
+## Anti-patrones
+
+- **No** dejes `expose_endpoints=True` sin `endpoint_slug` si el plural
+  natural es raro o colisiona con otro modelo.
+- **No** uses `ModelViewSet` propio para el modelo decorado sin
+  desactivar `SinpapelRouter`: tendrás rutas duplicadas.
+- **No** habilites `SINPAPEL_ALLOW_SERVER_SIGNING=True` sin checklist
+  legal y seguridad (ver `sinpapel-signing` y ADR-012).
+- **No** llames `available_transitions(request.user)` desde el cliente y
+  hagas la lógica de permisos en el frontend: la **autoridad** son
+  `grupos_permitidos` y el engine. El frontend solo refleja.
+- **No** sobrescribas `WorkflowViewSet.transition()` sin reproducir el
+  mapeo de excepciones: pierdes 403/400 consistentes.
+- **No** asumas que `?dry_run=true` aplica a `transition`: solo aplica a
+  `/flujos/import/`. Para transiciones, usa `preview-transition`.
+
+## Verificar el setup
+
+```python
+# manage.py shell
+from sinpapel.registry import WorkflowRegistry
+for cfg in WorkflowRegistry.list_exposed():
+    print(cfg.workflow_key, "→", cfg.effective_slug)
+```
+
+```bash
+# Lista de URLs registradas
+python manage.py show_urls | grep sinpapel
+```
+
+## Settings relevantes
+
+| Setting | Default | Propósito |
+|---|---|---|
+| `SINPAPEL_ALLOW_SERVER_SIGNING` | `False` | Habilita FIEL Modo B en `POST /transition/`. |
+| `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES` | — | Token, JWT, Session — lo que prefieras. |
+
+## Siguiente paso
+
+- Para webhooks complementarios: `sinpapel-webhooks`.
+- Para tests de viewsets: `sinpapel-testing`.

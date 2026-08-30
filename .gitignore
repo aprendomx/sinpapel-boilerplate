@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Django
+/backend/media/
+/backend/staticfiles/
+*.sqlite3
+
+# Node
+node_modules/
+/frontend/dist/
+/designer/dist/
+/e2e/test-results/
+/e2e/playwright-report/
+
+# Entorno — nunca commitear secretos ni llaves FIEL
+.env
+.env.*
+!.env.example
+*.key
+*.cer
+
+# Sistema
+.DS_Store

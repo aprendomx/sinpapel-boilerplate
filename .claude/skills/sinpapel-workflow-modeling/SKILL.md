@@ -1,0 +1,211 @@
+---
+name: sinpapel-workflow-modeling
+description: Usar siempre que el usuario decore un modelo Django con @workflow_enabled, defina Estado / VersionFlujo / ConfiguracionTransicion, implemente resolve_workflow_version(), consulte el WorkflowRegistry, o pregunte cómo modelar máquinas de estado en sinpapel. Cubre también nombres de campos requeridos (state_field, workflow_key, version_field, expose_endpoints, endpoint_slug) y errores como WorkflowConfigurationError o WorkflowDuplicateKeyError.
+tested_against:
+  - sinpapel==0.8.3
+applies_to:
+  - "**/models.py"
+  - "**/models/*.py"
+---
+
+# Modelado de workflows con sinpapel
+
+## El decorador `@workflow_enabled`
+
+Marca un modelo Django como capaz de transicionar entre estados de un
+workflow. Firma exacta (`sinpapel/decorators.py`):
+
+```python
+def workflow_enabled(
+    *,
+    state_field: str,
+    workflow_key: str,
+    version_field: str | None = None,
+    expose_endpoints: bool = False,
+    endpoint_slug: str | None = None,
+):
+```
+
+| Parámetro | Tipo | Obligatorio | Para qué |
+|---|---|---|---|
+| `state_field` | `str` | sí | Nombre del campo FK a `sinpapel.Estado` en el modelo decorado. |
+| `workflow_key` | `str` | sí | Identificador único del workflow (ej. `"solicitud"`). Único globalmente. |
+| `version_field` | `str \| None` | no | FK opcional a `sinpapel.VersionFlujo` en el modelo. Si no se da, se resuelve por `resolve_workflow_version()` o queda sin filtro. |
+| `expose_endpoints` | `bool` | no | Marca el modelo para auto-routing en `sinpapel-drf`. Default `False`. |
+| `endpoint_slug` | `str \| None` | no | Slug URL-safe (kebab-case `[a-z0-9-]+`). Default `workflow_key + "s"`. |
+
+**Excepciones que lanza el decorador:**
+
+- `WorkflowConfigurationError` si `state_field` o `version_field` no existen
+  en el modelo, o si `endpoint_slug` no es URL-safe.
+- `WorkflowConfigurationError` si el modelo no cumple el contrato `Trazable`:
+  desde 0.8.0 el decorador valida **en tiempo de decoración** que el modelo
+  tenga el campo `actualizado` (antes fallaba en runtime en la primera
+  transición). Hereda `sinpapel.mixins.Trazable` o define un
+  `DateTimeField` llamado `actualizado`.
+- `WorkflowDuplicateKeyError` si `workflow_key` ya fue registrado por otro
+  modelo distinto.
+
+## Ejemplo mínimo
+
+```python
+# tu_app/models.py
+from django.db import models
+from sinpapel import workflow_enabled
+from sinpapel.mixins import Trazable
+
+@workflow_enabled(
+    state_field="estado",
+    workflow_key="solicitud",
+)
+class Solicitud(Trazable):
+    folio = models.CharField(max_length=50, unique=True)
+    estado = models.ForeignKey(
+        "sinpapel.Estado",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+
+    def resolve_workflow_version(self):
+        # Se invoca por WorkflowEngine cuando version_field es None.
+        from sinpapel.models import VersionFlujo
+        return VersionFlujo.objects.filter(activo=True, nombre="solicitudes").first()
+```
+
+Métodos inyectados en `Solicitud` por el decorador (definidos en
+`sinpapel/injection.py`):
+
+- `available_transitions(user) -> list[Estado]`
+- `can_transition_to(target_state_name: str, user) -> tuple[bool, str | None]`
+- `transition(target_state_name: str, user, **kwargs) -> dict`
+- `preview_transition(target_state_name: str, user) -> dict`
+
+Los cuatro se inyectan realmente (`sinpapel/injection.py`); desde 0.6.0
+`preview_transition` también está disponible en la instancia (antes faltaba
+en algunos consumidores). Cómo invocarlos y el reporte que devuelve
+`preview_transition` — incluido el enforce de requisitos documentales — en
+la skill `sinpapel-transitions`.
+
+## Modelos del framework
+
+Los tres modelos que **siempre** vas a poblar al modelar un flujo.
+
+### `sinpapel.Estado`
+
+Nodo del grafo (catálogo). Hereda `Catalogo` (que hereda `Trazable`).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `nombre` | `CharField(250)` | **Único a nivel BD** desde 0.8.0 (constraint `sin_estado_nombre_uniq`); dos estados homónimos ya no pueden existir. Convención: `MAYÚSCULAS_GUION_BAJO` (`CAPTURA`, `EN_REVISION`). |
+| `activo` | `BooleanField` | Con `SINPAPEL_ENFORCE_ESTADO_ACTIVO=True` (default `False`, 0.8.1), un estado inactivo no es destino válido y desaparece de `available_transitions`. |
+| `etapa` | `FK(Etapa)` | Agrupación visual (nullable). |
+| `color` | `CharField(7)` | Color hex para UI. Default `#4DEFE2`. |
+| `orden` | `IntegerField` | Ordenamiento visual. |
+| `permite_expediente` | `BooleanField` | ¿Acepta documentos adjuntos? |
+| `expediente_obligatorio` | `BooleanField` | ¿Requiere ≥1 documento? |
+| `icono` | `CharField(80)` | Material Design icon. |
+
+### `sinpapel.VersionFlujo`
+
+Versión inmutable del workflow. Con `HistoricalRecords`.
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `nombre` | `CharField(100)` | Identificador del flujo (ej. `"solicitudes"`). |
+| `activo` | `BooleanField` | Solo **una** versión activa por `nombre`, forzado a nivel BD desde 0.8.0 (constraint condicional `sin_versionflujo_activa_uniq`). Para activar una nueva versión, desactiva la anterior antes o en la misma transacción. |
+| `metadatos` | `JSONField` | Para el designer (posiciones de nodos, etc.). |
+| `creado_por` | `FK(User)` | Quién creó la versión. |
+
+### `sinpapel.ConfiguracionTransicion`
+
+Arista del grafo. Con `HistoricalRecords` (incluye `grupos_permitidos`).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `flujo` | `FK(VersionFlujo)` | A qué versión pertenece esta arista. |
+| `estado_origen` | `FK(Estado)` | Origen. |
+| `estado_destino` | `FK(Estado)` | Destino. |
+| `grupos_permitidos` | `M2M(Group)` | Grupos Django autorizados. **Vacío = cualquiera**. |
+| `requiere_firma` | `BooleanField` | Nuevo en 0.8.0, default `False`. Con `True`, `transition()` sin `firma_payload` lanza `PermissionError`, y `preview_transition()` incluye la key `firma_requerida: bool`. |
+
+`unique_together = (flujo, estado_origen, estado_destino)`.
+
+## Resolución del flujo activo
+
+`WorkflowEngine` resuelve qué `VersionFlujo` aplica a una instancia, en
+este orden (ver `WorkflowEngine._resolve_flujo`):
+
+1. Si el modelo tiene `version_field` configurado en `@workflow_enabled`,
+   usa `getattr(instance, version_field)`.
+2. Si no, si el modelo define `resolve_workflow_version(self)`, lo invoca.
+3. Si tampoco, las queries a `ConfiguracionTransicion` no filtran por
+   flujo (usan **todas** las aristas sin distinción).
+
+Desde 0.7.1 `instance.available_transitions()` filtra por el `VersionFlujo`
+resuelto y usa cache (antes, por bug, devolvía transiciones de **todos**
+los flujos).
+
+**Recomendación**: siempre provee uno de los dos mecanismos. Sin filtro de
+flujo, un sistema con varias versiones produce comportamiento ambiguo.
+
+## `WorkflowRegistry`
+
+El decorador registra el modelo en un singleton en
+`sinpapel/registry.py`. API pública:
+
+```python
+from sinpapel.registry import WorkflowRegistry, WorkflowConfig
+
+config = WorkflowRegistry.get("solicitud")      # WorkflowConfig | KeyError
+keys = WorkflowRegistry.list_keys()             # list[str]
+exposed = WorkflowRegistry.list_exposed()       # list[WorkflowConfig] con expose_endpoints=True
+WorkflowRegistry.unregister("solicitud")        # útil en tests
+```
+
+`WorkflowConfig` es un `dataclass(frozen=True)` con `model`, `state_field`,
+`workflow_key`, `version_field`, `expose_endpoints`, `endpoint_slug`, y la
+propiedad `effective_slug` (= `endpoint_slug or workflow_key + "s"`).
+
+## Convenciones recomendadas
+
+- **`workflow_key`**: kebab/snake-case singular, único por modelo
+  (`"solicitud"`, `"tramite_sep"`).
+- **Nombres de `Estado`**: `MAYÚSCULAS_GUION_BAJO` (consistente con el
+  framework: `CAPTURA`, `EN_REVISION`, `APROBADA`).
+- **Una sola `VersionFlujo` activa por `nombre`** — desde 0.8.0 el framework
+  **sí lo fuerza** a nivel BD (constraint `sin_versionflujo_activa_uniq`);
+  `resolve_workflow_version()` típicamente filtra por `activo=True`.
+- **`on_delete=PROTECT`** en el FK a `Estado`: nunca borres en cascada
+  registros de trámite porque un catálogo se rehidrate.
+- **Hereda `Trazable`** del propio framework (`sinpapel.mixins.Trazable`)
+  cuando quieras `creado`, `actualizado`, `autor`, `modificador`.
+
+## Anti-patrones
+
+- **No** uses choices fijos en `state` (`models.CharField(choices=...)`):
+  los estados son datos, no código.
+- **No** dupliques `workflow_key` entre modelos: lanza
+  `WorkflowDuplicateKeyError`.
+- **No** confíes en que el modelo encuentre solo el flujo activo si no
+  defines `resolve_workflow_version()` ni `version_field`.
+- **No** te saltes `HistoricalRecords` en tus modelos si quieres
+  trazabilidad full — `SeguimientoWorkflow` registra **transiciones**, no
+  ediciones de otros campos.
+- **No** uses `models.SET_NULL` en el FK al estado: una instancia sin estado
+  rompe el motor.
+
+## Errores típicos
+
+| Excepción | Causa | Solución |
+|---|---|---|
+| `WorkflowConfigurationError: state_field 'estado' not on model` | Campo no existe o tiene otro nombre. | Corregir `state_field=...` o renombrar el campo. |
+| `WorkflowDuplicateKeyError: workflow_key 'solicitud' already registered by Otra` | Otro modelo ya usa esa key. | Renombrar `workflow_key`. |
+| `WorkflowConfigurationError: endpoint_slug 'mis_slugs' is not URL-safe` | Slug contiene caracteres fuera de `[a-z0-9-]+`. | Usar kebab-case. |
+| `WorkflowConfigurationError: Model X has no field 'actualizado'` | El modelo decorado no cumple el contrato `Trazable` (0.8.0 valida en decoración). | Heredar `sinpapel.mixins.Trazable` o definir un `DateTimeField` llamado `actualizado`. |
+
+## Siguiente paso
+
+Cuando tengas tus modelos decorados, ve a `sinpapel-migrations-seeding`
+para sembrar `Estado`, `VersionFlujo` y `ConfiguracionTransicion`, y
+después a `sinpapel-transitions` para empezar a transicionar instancias.

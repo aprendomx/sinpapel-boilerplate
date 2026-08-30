@@ -1,0 +1,188 @@
+---
+name: sinpapel-sla
+description: Usar siempre que el usuario defina tiempos máximos por estado, escalamiento o alertas de vencimiento; use SLAConfiguracion, SLAEngine, las acciones notificar / escalar / rechazar / alertar, el comando sinpapel_verificar_slas, o los signals sla_breached y sla_action_executed. Cubre cómo configurar el cron, el dry-run y la integración con webhooks/notificaciones.
+tested_against:
+  - sinpapel==0.8.3
+applies_to:
+  - "**/migrations/*seed*sla*.py"
+---
+
+# SLAs en sinpapel
+
+## Concepto
+
+Una `SLAConfiguracion` define cuánto tiempo puede una instancia permanecer
+en un estado dado antes de disparar una **acción**. Lo evalúa `SLAEngine`
+en un cron periódico (no es event-driven: lo dispara un comando o tarea
+programada).
+
+El plazo mide **tiempo-en-estado**, no edad de la instancia: la referencia
+es la fecha del último `SeguimientoWorkflow` de la instancia (fallback: el
+campo `creado` si no hay historial). Desde 0.8.0 las acciones **ejecutan de
+verdad** (ya no son stubs): `escalar`/`rechazar` transicionan vía
+`WorkflowEngine`, `notificar` despacha a un handler configurable y
+`alertar` persiste la bandera.
+
+Módulos:
+
+- Modelo: `sinpapel/models/sla.py` (`SLAConfiguracion`).
+- Motor: `sinpapel/services/sla_engine.py` (`SLAEngine`).
+- Comando: `python manage.py sinpapel_verificar_slas`.
+- Signals: `sla_breached`, `sla_action_executed` (en `sinpapel.signals`).
+
+## El modelo `SLAConfiguracion`
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `estado` | `FK(Estado)` | Estado al que aplica. |
+| `dias_maximos` | `IntegerField` | Cuántos días máximo en el estado. |
+| `accion_vencimiento` | `CharField` | `"notificar"`, `"escalar"`, `"rechazar"`, `"alertar"`. |
+| `configuracion_accion` | `JSONField` | Parámetros de la acción (ver abajo). |
+| `activo` | `BooleanField` | Si `False`, no se evalúa. |
+
+## Acciones (`accion_vencimiento`)
+
+| Acción | Qué hace |
+|---|---|
+| `notificar` | Despacha al callable de `SINPAPEL_SLA_NOTIFY_HANDLER` (dotted path, firma `handler(instance, descriptor)`); sin handler configurado solo loggea. El resultado incluye `notificado: bool`. No muta estado. |
+| `escalar` | **Ejecuta** la transición automática al `estado_destino` de `configuracion_accion`, vía `WorkflowEngine`, con el usuario de `SINPAPEL_SLA_SYSTEM_USER`. Sin ese setting no transiciona y reporta `error` en el resultado. |
+| `rechazar` | Igual que `escalar`, pero hacia el estado de rechazo configurado. Transición automatizada real. |
+| `alertar` | Activa la bandera configurada (`campo`/`valor`) en la instancia y la persiste con `save(update_fields=[campo])`. El resultado incluye `persistido: bool`. El estado **no muta**. |
+
+`configuracion_accion` típico:
+
+```json
+{
+  "grupo_id": 1,
+  "template": "expiration.html",
+  "estado_destino": "RECHAZADA_POR_VENCIMIENTO"
+}
+```
+
+Para `alertar`: `{"campo": "vencida", "valor": true}`.
+
+Las keys exactas dependen de la acción. Consulta
+`sinpapel/services/sla_engine.py` (`_accion_notificar`, `_accion_escalar`,
+`_accion_rechazar`, `_accion_alertar`) para el contrato actual.
+
+El usuario de `SINPAPEL_SLA_SYSTEM_USER` (username) debe tener permiso para
+las transiciones automáticas: superuser o miembro de los
+`grupos_permitidos` de la `ConfiguracionTransicion`.
+
+## Evaluar SLAs
+
+### Por instancia
+
+```python
+from sinpapel.services.sla_engine import SLAEngine
+
+acciones = SLAEngine.evaluar_instancia(solicitud)
+# → lista de dicts con el resultado de cada acción ejecutada
+#   (ej. {"accion": "escalar", "estado_destino": ..., "ejecutado": True})
+```
+
+`evaluar_instancia` resuelve cuánto tiempo lleva la instancia en su estado
+actual (fecha del último `SeguimientoWorkflow`; fallback `creado`) y
+ejecuta las acciones cuyo plazo haya vencido. Acepta `dry_run=True`.
+
+### Masivamente (todos los `SLAConfiguracion` activos)
+
+```python
+conteo = SLAEngine.verificar_todos(dry_run=False)
+# → dict {accion: n}; escanea TODOS los modelos del WorkflowRegistry
+```
+
+```bash
+python manage.py sinpapel_verificar_slas
+python manage.py sinpapel_verificar_slas --dry-run   # reporta sin ejecutar acciones NI emitir señales
+```
+
+Programa este comando en un cron (típico: cada hora). En entornos serios,
+considera `celery beat` u otro scheduler.
+
+## Signals
+
+```python
+from django.dispatch import receiver
+from sinpapel.signals import sla_breached, sla_action_executed
+
+@receiver(sla_breached)
+def on_breach(sender, target, sla, dias_transcurridos, **kwargs):
+    # Métricas, logs, alertas.
+    ...
+
+@receiver(sla_action_executed)
+def on_action(sender, target, sla, accion, resultado, **kwargs):
+    # Confirmación tras la acción.
+    ...
+```
+
+`sinpapel-webhooks` ya emite ambos signals como webhooks
+(`sla.breached`, `sla.action.executed`).
+
+En `--dry-run` no se emite ninguna de las dos señales.
+
+## Settings (0.8.0, opcionales)
+
+| Setting | Default | Uso |
+|---|---|---|
+| `SINPAPEL_SLA_SYSTEM_USER` | `None` | Username del usuario de sistema para las transiciones automáticas de `escalar`/`rechazar`. Sin él, esas acciones no transicionan y reportan `error`. |
+| `SINPAPEL_SLA_NOTIFY_HANDLER` | `None` | Dotted path al callable `handler(instance, descriptor)` que envía la notificación real (email, chat, webhook…). Sin él, `notificar` solo loggea. |
+
+## Sembrar un SLA
+
+```python
+# tu_app/migrations/0004_seed_sla.py
+def seed(apps, schema_editor):
+    Estado = apps.get_model("sinpapel", "Estado")
+    SLA = apps.get_model("sinpapel", "SLAConfiguracion")
+
+    en_revision = Estado.objects.get(nombre="EN_REVISION")
+    SLA.objects.create(
+        estado=en_revision,
+        dias_maximos=3,
+        accion_vencimiento="notificar",
+        configuracion_accion={"grupo_id": 1, "template": "expiration.html"},
+        activo=True,
+    )
+```
+
+## Endpoint REST
+
+`sinpapel-drf` expone CRUD admin (`/slas/`), evaluación masiva
+(`POST /slas/verificar/`) y estado por instancia
+(`POST /<slug>/<pk>/sla-status/`). Ver `sinpapel-drf`.
+
+## Anti-patrones
+
+- **No** uses `accion_vencimiento="escalar"` sin verificar que existe la
+  `ConfiguracionTransicion` desde el estado actual al destino: el motor
+  fallará la transición.
+- **No** olvides configurar `SINPAPEL_SLA_SYSTEM_USER` (y darle permiso:
+  superuser o grupos) si usas `escalar`/`rechazar`: sin él la acción no
+  transiciona y solo reporta `error` en el resultado.
+- **No** pongas `dias_maximos=0` salvo en pruebas: provoca falsos
+  positivos en cada ejecución del cron.
+- **No** ejecutes `sinpapel_verificar_slas` dentro de un request
+  síncrono: puede ser lento. Úsalo desde cron/Celery.
+- **No** asumas que la acción es transaccional con el cron: si un
+  `escalar` falla por un predicado bloqueante, la acción no se ejecuta
+  (queda registrada como fallo).
+- **No** dupliques `SLAConfiguracion` activos para el mismo estado: se
+  evalúan ambos. Usa uno único por (estado, escenario) o desactiva el
+  redundante.
+
+## Patrón de operación
+
+1. Sembrar SLAs en una data migration por estado relevante.
+2. Programar `sinpapel_verificar_slas` cada hora (cron / Celery beat).
+3. Conectar `sla_breached` y `sla_action_executed` a tu logging /
+   métricas.
+4. (Opcional) Suscribir `sinpapel-webhooks` a `sla.breached` para enviar
+   alertas a sistemas externos.
+
+## Siguiente paso
+
+- Programación de la tarea: combina con tu orquestador.
+- Para acción tipo "notificar": considera `sinpapel-webhooks` como
+  transporte.

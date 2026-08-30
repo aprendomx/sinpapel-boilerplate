@@ -1,0 +1,21 @@
+# Definición del sistema.
+#
+# Este archivo es la entrada de alto nivel: describe QUÉ sistema es, para quién
+# y con qué áreas. Los flujos concretos (estados y transiciones) NO viven aquí:
+# viven en spec/flujos/*.json y se siembran por data migration.
+#
+# `make rename NAME=<slug>` reescribe el identificador del sistema a partir de
+# este archivo.
+
+sistema:
+  # Identificador técnico. Kebab-case, sin acentos: se usa en nombres de
+  # contenedores, base de datos y paquetes.
+  slug: sinpapel-boilerplate
+  # Nombre visible para las personas usuarias.
+  nombre: Sistema de trámites
+  descripcion: >-
+    Template ejecutable para construir sistemas de trámites sobre el framework
+    sinpapel. Un despliegue por cliente (single-tenant).
+
+# Los actores, roles, dependencias y trámites se declaran conforme cada uno se
+# implementa: este archivo describe el sistema real, no un plan.

@@ -1,0 +1,225 @@
+---
+name: sinpapel-project-setup
+description: Usar siempre que el usuario instale sinpapel en un proyecto Django nuevo o existente, configure INSTALLED_APPS, MIDDLEWARE o cualquier setting con prefijo SINPAPEL_*; mencione errores como "Estado no resuelto" / "history_user is None" / "AppRegistryNotReady"; o pregunte por dependencias (django-simple-history, cryptography, Pillow), versiones soportadas o el orden correcto de las apps. Cubre el primer migrate, la instalación desde PyPI (pip install "sinpapel~=0.8.1") y la verificación post-setup.
+tested_against:
+  - sinpapel==0.8.3
+applies_to:
+  - "**/settings*.py"
+  - "**/requirements*.txt"
+  - "**/pyproject.toml"
+---
+
+# Setup de un proyecto Django con sinpapel
+
+## Requisitos
+
+- Python ≥ 3.10
+- Django ≥ 5.0
+- Una base de datos relacional (PostgreSQL recomendado en producción;
+  SQLite vale para dev)
+
+El pin de Django no tiene techo (`Django>=5.0`): un `pip install` sin
+restricción propia puede traerte un major nuevo sin avisar. Si tu proyecto
+necesita una serie concreta, píneala tú (`Django>=5.2,<6.0`).
+
+## Instalación
+
+`sinpapel` se publica en **PyPI**. Contrato pre-1.0: los minors PUEDEN
+romper; pinea con `~=` al patch:
+
+```bash
+pip install "sinpapel~=0.8.1"
+```
+
+Ya **no** se recomienda instalar desde git+ssh con tags (mecanismo de las
+versiones ≤0.7.x).
+
+**Al hacer upgrade entre versiones:** los breaking changes por versión están
+documentados en `docs/development/upgrading.md` (repo sinpapel), y la
+superficie pública en `docs/development/api-publica.md`. Tras cada upgrade
+corre `python manage.py migrate` — 0.8.x trae migraciones nuevas (la serie
+llega hasta `0009`; 0.8.0 añade `0007`–`0009`).
+
+Dependencias transitivas que se instalan automáticamente:
+
+- `Django>=5.0`
+- `django-simple-history>=3.5`
+- `cryptography>=42.0` (la usa `FielBackend`)
+- `Pillow` (ya declarada desde 0.8.x; antes una instalación limpia fallaba
+  con `fields.E210` y había que instalarla a mano)
+
+**No instales `trazable` por separado**: el mixin está inlined en
+`sinpapel/mixins.py`.
+
+## Usuario custom (`AUTH_USER_MODEL`)
+
+**Soportado desde sinpapel 0.8.3.** Los FKs a usuario del framework
+(`VersionFlujo.creado_por`, `SeguimientoWorkflow.usuario_accion`,
+`RegistroFirma.signer`, y `WebhookSubscription.created_by` en
+`sinpapel-webhooks` 0.2.4) se declaran con `settings.AUTH_USER_MODEL`.
+
+```python
+# settings.py
+AUTH_USER_MODEL = "cuentas.Usuario"
+```
+
+**En 0.8.2 y anteriores esto NO funcionaba.** Esas versiones declaraban los
+FKs con el literal `"auth.User"`; con un usuario custom, Django aborta el
+system check y ni `manage.py check` ni `migrate` corren:
+
+```
+ERRORS:
+sinpapel.SeguimientoWorkflow.usuario_accion: (fields.E301) Field defines a
+relation with the model 'auth.User', which has been swapped out.
+  HINT: Update the relation to point at 'settings.AUTH_USER_MODEL'.
+```
+
+Si ves `fields.E301` mencionando `auth.User` y un modelo de `sinpapel`,
+actualiza a `sinpapel>=0.8.3` (y a `sinpapel-webhooks>=0.2.4` si lo usas).
+No hay migración asociada: las migraciones ya usaban
+`settings.AUTH_USER_MODEL`, el desajuste vivía solo en las definiciones de
+modelo, así que el upgrade no toca el esquema.
+
+Como siempre en Django, define `AUTH_USER_MODEL` **antes** del primer
+`migrate`: cambiarlo con migraciones ya aplicadas es costoso.
+
+## INSTALLED_APPS — orden requerido
+
+```python
+INSTALLED_APPS = [
+    # Django built-ins
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "django.contrib.admin",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+
+    # Dependencias de sinpapel
+    "simple_history",       # antes de sinpapel
+
+    # sinpapel
+    "sinpapel",             # antes de tus apps de dominio
+
+    # Tu(s) app(s) de dominio
+    "tu_app",
+]
+```
+
+**Por qué este orden**: `simple_history` registra los modelos históricos;
+`sinpapel` define modelos con `HistoricalRecords` que dependen de ello; y
+las apps de dominio referencian `sinpapel.Estado` por FK string.
+
+## MIDDLEWARE — middleware de history
+
+```python
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "simple_history.middleware.HistoryRequestMiddleware",  # ← tras AuthenticationMiddleware
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+```
+
+**Por qué**: `HistoryRequestMiddleware` puebla `history_user` en cada
+`HistoricalRecords`. Sin él, todos los cambios quedan con `history_user =
+None`. Va **después** de `AuthenticationMiddleware` porque depende de
+`request.user`.
+
+## Settings `SINPAPEL_*`
+
+| Setting | Default | Propósito |
+|---|---|---|
+| `SINPAPEL_SIGNATURE_BACKEND` | `"sinpapel.signing.backends.manual.ManualBackend"` | Dotted path del backend de firma. Otros: `sinpapel.signing.backends.fiel.FielBackend`, `sinpapel.signing.backends.fake.FakeBackend`. |
+| `SINPAPEL_ALLOW_SERVER_SIGNING` | `False` | Habilita Modo B (server-side) en `FielBackend`. Requiere revisión legal. |
+| `SINPAPEL_RSA_PRIVATE_KEY_PATH` | `None` | Ruta a `.key` privada (solo si server-side signing). |
+| `SINPAPEL_RSA_PUBLIC_KEY_PATH` | `None` | Ruta a `.cer` / `.pub` (solo si server-side signing). |
+| `SINPAPEL_EMIT_PREVIEW_EVENTS` | `False` | Opt-in: dispara `transition_preview_requested` en cada preview. |
+| `SINPAPEL_CACHE_ALIAS` | `"default"` | Alias del cache backend (django.core.cache.caches). |
+| `SINPAPEL_CACHE_TIMEOUT` | `3600` | TTL en segundos para cache interna. |
+| `SINPAPEL_PREDICATE_MODULES` | `None` | Whitelist de módulos para predicados `python_path` (seguridad). Lista de dotted paths. |
+| `SINPAPEL_FIEL_TRUSTED_CA_BUNDLE` | `None` | ACs de confianza para la cadena FIEL (path PEM o lista de paths con ACs del SAT). Sin bundle, las firmas se persisten como `VALIDA_SIN_CADENA`. Nuevo en 0.8.0. |
+| `SINPAPEL_SLA_SYSTEM_USER` | `None` | Username del usuario de sistema con el que las acciones SLA `escalar`/`rechazar` ejecutan la transición automática (debe tener permiso). Nuevo en 0.8.0. |
+| `SINPAPEL_SLA_NOTIFY_HANDLER` | `None` | Dotted path del callable de notificación SLA, firma `handler(instance, descriptor)`; sin handler solo se loggea. Nuevo en 0.8.0. |
+| `SINPAPEL_ENFORCE_ESTADO_ACTIVO` | `False` | Con `True`, un `Estado.activo=False` no es destino válido y desaparece de `available_transitions`. Nuevo en 0.8.1. |
+
+Detalle por setting en `references/settings-reference.md`.
+
+## Settings recomendados para desarrollo
+
+```python
+# settings/dev.py
+SINPAPEL_SIGNATURE_BACKEND = "sinpapel.signing.backends.manual.ManualBackend"
+SINPAPEL_ALLOW_SERVER_SIGNING = False
+SINPAPEL_PREDICATE_MODULES = ["tu_app.predicates"]  # whitelist explícita
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
+```
+
+## Primer migrate
+
+```bash
+python manage.py migrate
+```
+
+Aplica:
+
+- Tablas de `simple_history` (sus históricos por modelo).
+- Tablas de `sinpapel` (`sinpapel_estado`, `sinpapel_versionflujo`,
+  `sinpapel_configuraciontransicion`, `sinpapel_seguimientoworkflow`,
+  `sinpapel_registrofirma`, `sinpapel_condiciontransicion`,
+  `sinpapel_slaconfiguracion`, etc.). La serie de migraciones del
+  framework llega hasta `0009` en 0.8.x (0.8.0 añade `0007`–`0009`:
+  constraints de unicidad, `requiere_firma`, cambios de `on_delete`).
+
+## Verificación post-setup
+
+```python
+# Django shell: python manage.py shell
+from sinpapel import workflow_enabled  # noqa
+from sinpapel.registry import WorkflowRegistry
+from sinpapel.signing.factory import get_signature_backend
+
+print(WorkflowRegistry.list_keys())     # ['solicitud', ...] tras decorar modelos
+print(get_signature_backend().name)     # 'manual' | 'fiel' | 'fake'
+```
+
+## Anti-patrones
+
+- **No** instales desde git+ssh con tag (`sinpapel @ git+ssh://...@v0.7.0`):
+  ese era el mecanismo de las versiones viejas. Instala desde PyPI.
+- **No** uses `pip install sinpapel` sin pinear ni rangos amplios tipo
+  `>=0.5,<1.0`. Pre-1.0 los minors pueden romper; pinea `sinpapel~=0.8.1`.
+- **No** pongas `simple_history` después de `sinpapel`.
+- **No** olvides `HistoryRequestMiddleware` — el audit trail funciona, pero
+  `history_user` queda en `None`.
+- **No** pongas `WorkflowService` en ningún sitio: ese servicio no existe;
+  el motor es `WorkflowEngine`.
+- **No** dejes `SINPAPEL_PREDICATE_MODULES = None` si vas a usar predicados
+  `python_path` con código de tu proyecto: explícita la whitelist.
+- **No** crees fixtures de datos vía `loaddata` para `Estado`/`VersionFlujo`:
+  usa data migrations (ver `sinpapel-migrations-seeding`).
+
+## Troubleshooting
+
+| Síntoma | Causa probable | Solución |
+|---|---|---|
+| `AppRegistryNotReady` al importar `WorkflowRegistry` | Importas fuera de `apps.ready()` o antes de Django setup. | Mover el import dentro de la función/método donde se usa. |
+| `history_user is None` en todos los cambios | Falta `HistoryRequestMiddleware`, o el cambio ocurre fuera de un request (management command, signal sin middleware). Es esperado en background. | Añadir middleware; en jobs en background, asume `None`. |
+| `LookupError: No installed app with label 'simple_history'` al migrar | `simple_history` falta o va después de `sinpapel`. | Añadirlo y ponerlo **antes** de `sinpapel`. |
+| `WorkflowConfigurationError: state_field 'estado' not on model` | Decorador `@workflow_enabled(state_field=...)` apunta a un campo inexistente. | Corregir el nombre del campo FK a `sinpapel.Estado`. |
+| Falla `cryptography` al instalar | Falta toolchain de compilación. | `pip install --upgrade pip wheel` y/o instalar headers de OpenSSL. |
+| `fields.E301 … relation with the model 'auth.User', which has been swapped out` | `sinpapel<0.8.3` (o `sinpapel-webhooks<0.2.4`) con `AUTH_USER_MODEL` custom. | Actualizar a `sinpapel>=0.8.3` / `sinpapel-webhooks>=0.2.4`. Sin migración. |
+
+## Siguiente paso
+
+Cuando termines el setup, ve a `sinpapel-workflow-modeling` para decorar
+tu primer modelo de dominio y sembrar el flujo inicial.

@@ -1,0 +1,216 @@
+---
+name: sinpapel-predicates
+description: Usar siempre que el usuario defina reglas de negocio que bloqueen una transición (montos, fechas, validaciones cruzadas), use CondicionTransicion, PredicateEngine, los backends python_path / json_logic / django_orm, o vea el signal predicate_failed. Cubre cómo configurar SINPAPEL_PREDICATE_MODULES como whitelist de seguridad y el JSON Logic restringido del framework.
+tested_against:
+  - sinpapel==0.8.3
+applies_to:
+  - "**/predicates.py"
+  - "**/migrations/*seed*predicates*.py"
+---
+
+# Predicados de transición
+
+## Qué son
+
+Reglas evaluadas **antes** de cambiar de estado. Si fallan, `transition()`
+lanza `PermissionError` con el `mensaje_error` de la condición (mapeable a
+403, como cualquier bloqueo de `puede_cambiar_estado`). Se modelan como
+filas en `sinpapel.models.CondicionTransicion`, una por arista de
+transición.
+
+Implementación: `sinpapel/services/predicate_engine.py`. El modelo está
+en `sinpapel/models/predicates.py` (re-exportado en `sinpapel.models`).
+
+## El modelo `CondicionTransicion`
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `transicion` | `FK(ConfiguracionTransicion)` | A qué arista pertenece. |
+| `tipo` | `CharField` | Uno de: `"python_path"`, `"json_logic"`, `"django_orm"`. |
+| `configuracion` | `JSONField` | Datos específicos del backend (ver abajo). |
+| `mensaje_error` | `CharField(250)` | Lo que ve el usuario si falla. |
+| `orden` | `IntegerField` | Orden de evaluación (asc). |
+| `activo` | `BooleanField` | Si `False`, no se evalúa. |
+
+**Sin `HistoricalRecords`**: editar una condición no deja rastro histórico.
+Si necesitas auditar cambios de reglas, suscríbete al evento
+`workflow.predicate.configured` de `sinpapel-webhooks` o registra el cambio
+desde tu propia capa.
+
+## Los 3 backends de `PredicateEngine`
+
+Desde 0.8.0 cada backend **valida su `configuracion`**: `python_path`
+exige `path` (str), `json_logic` exige `rule`, `django_orm` exige `lookup`
+(dict no vacío). Una config que no cumple ya no revienta la transición con
+un 500 — ver "Config inválida" abajo.
+
+### `python_path`
+
+Apunta a un callable que recibe `(instance, user)` y devuelve `bool` o
+`tuple[bool, str]` (el `str` es un mensaje de error).
+
+```python
+# configuracion JSONField:
+{"path": "tu_app.predicates.monto_minimo_aprobado"}
+
+# tu_app/predicates.py
+def monto_minimo_aprobado(instance, user):
+    return instance.monto >= 100_000
+```
+
+**Seguridad — `SINPAPEL_PREDICATE_MODULES`**: el motor importa solamente
+módulos cuya raíz está en la whitelist. Sin esa whitelist (`None` por
+default), el backend `python_path` **rechaza todo**.
+
+```python
+# settings.py
+SINPAPEL_PREDICATE_MODULES = ["tu_app.predicates", "otra_app.rules"]
+```
+
+### `json_logic`
+
+Evaluador JSON Logic **restringido** (solo operadores seguros, sin acceso
+a funciones del host). Implementado en `sinpapel/json_logic.py`.
+
+```python
+# configuracion JSONField:
+{
+  "rule": {
+    ">=": [{"var": "meta.monto_solicitado"}, 100000]
+  }
+}
+```
+
+Variables disponibles (contexto que construye el motor):
+
+- `instance.pk` — ID de la instancia.
+- `meta.<key>` — metadatos capturados (`MetadatosCapturables`, vía
+  `instance.meta.to_dict()`).
+- `user.id`, `user.username` — usuario que ejecuta.
+
+Para condicionar sobre otros campos del modelo, usa `django_orm` (lookup
+ORM) o expón el dato como metadato.
+
+### `django_orm`
+
+Ejecuta un `.exists()` sobre la **propia instancia**: filtra
+`type(instance).objects.filter(pk=instance.pk, **lookup)`.
+
+```python
+# configuracion JSONField:
+{
+  "lookup": {"monto__gte": 100000}
+}
+```
+
+`lookup` debe ser un dict **no vacío** de lookups ORM válidos sobre el
+modelo de la instancia (0.8.0 lo valida). Pasa si el queryset filtrado
+`.exists()`.
+
+## Cómo se invocan
+
+El motor las evalúa automáticamente en `puede_cambiar_estado()` y antes
+de mutar el estado en `cambiar_estado()`. Si una falla:
+
+- `preview_transition()` retorna `permitido=False`,
+  `predicados_fallidos=[{"condicion_id", "tipo", "mensaje"}]`, y
+  `razones_bloqueo`.
+- `transition()` lanza `PermissionError` (con el mensaje del primer
+  bloqueo) y se dispara el signal `predicate_failed`.
+
+El `mensaje` mostrado es el `mensaje_error` de la condición; si está
+vacío, el mensaje que retornó el backend.
+
+## Config inválida = bloqueo controlado (0.8.0)
+
+Una `CondicionTransicion` mal configurada — `path` fuera de la whitelist,
+key faltante en `configuracion` (`path` / `rule` / `lookup`), backend
+desconocido en `tipo` — ya **no** produce una excepción sin manejar (500).
+El motor la trata como **condición fallida**: la transición queda
+bloqueada, el detalle se logea (`logger.exception`) y el usuario ve el
+`mensaje_error` de la condición (o, si está vacío, un mensaje genérico de
+"condición mal configurada; contacta al administrador del flujo").
+
+Ojo: el bloqueo controlado protege al usuario final, pero el flujo sigue
+roto — revisa los logs y corrige la configuración.
+
+## Sembrar predicados
+
+Igual que cualquier otra config del flujo: data migrations
+(`sinpapel-migrations-seeding`).
+
+```python
+# tu_app/migrations/0003_seed_predicado.py
+def seed(apps, schema_editor):
+    Cond = apps.get_model("sinpapel", "CondicionTransicion")
+    CT = apps.get_model("sinpapel", "ConfiguracionTransicion")
+
+    transicion = CT.objects.get(
+        flujo__nombre="solicitudes",
+        estado_origen__nombre="EN_REVISION",
+        estado_destino__nombre="APROBADA",
+    )
+    Cond.objects.create(
+        transicion=transicion,
+        tipo="json_logic",
+        configuracion={"rule": {">=": [{"var": "meta.monto_solicitado"}, 100000]}},
+        mensaje_error="El monto debe ser mayor o igual a $100,000",
+        orden=1,
+        activo=True,
+    )
+```
+
+## Reaccionar a un predicado fallido (signal)
+
+```python
+from django.dispatch import receiver
+from sinpapel.signals import predicate_failed
+
+@receiver(predicate_failed)
+def on_predicate_failed(sender, target, condicion, user, target_state, **kwargs):
+    # logear, registrar métrica, notificar, etc.
+    ...
+```
+
+## Anti-patrones
+
+- **No** uses `python_path` sin configurar `SINPAPEL_PREDICATE_MODULES`:
+  ninguna condición pasará. Desde 0.8.0 eso es un bloqueo controlado con
+  el `mensaje_error` de la condición (ya no un 500), pero las transiciones
+  con esa condición siguen bloqueadas hasta configurar la whitelist.
+- **No** importes `os`, `subprocess`, lectura de archivos u operaciones
+  pesadas dentro de un predicado: corre dentro de la transacción y se
+  evalúa en cada `transition()` y cada `preview_transition()`.
+- **No** dependas del orden de evaluación entre tipos distintos: ordena
+  con el campo `orden` y mantén consistencia.
+- **No** mezcles validación de **datos** con predicados: la validación de
+  campos va en `clean()` / `MetadatosCapturables`. Los predicados son
+  reglas de **transición**.
+- **No** uses JSON Logic para algo que requiera lookups en BD: usa
+  `django_orm`.
+- **No** olvides el `mensaje_error`: es lo que ve el usuario. "false" o
+  cadena vacía hace inutilizable la UI.
+
+## Patrón: predicados compuestos
+
+Si necesitas "A y B y C", crea **tres** filas con orden 1, 2, 3 — son
+AND implícito. Para "A o B", combínalo dentro de un único JSON Logic
+con `{"or": [...]}`.
+
+## Verificar predicados desde un test
+
+```python
+from sinpapel.services.workflow_engine import WorkflowEngine
+
+engine = WorkflowEngine()
+puede, mensaje = engine.puede_cambiar_estado(
+    instancia, "APROBADA", user
+)
+assert puede is False
+assert "monto" in mensaje.lower()
+```
+
+## Siguiente paso
+
+- Si quieres validar **metadatos** (no transición): `sinpapel-metadata`.
+- Si quieres reglas temporales (vencimientos): `sinpapel-sla`.

@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        # Misma imagen que ops/docker/docker-compose.yml.
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: sinpapel
+          POSTGRES_USER: sinpapel
+          POSTGRES_PASSWORD: sinpapel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sinpapel -d sinpapel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://sinpapel:sinpapel@localhost:5432/sinpapel
+      DJANGO_SECRET_KEY: ci-no-usar-en-produccion
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias
+        run: make install
+
+      - name: Gates
+        # `make verify` corre lint, migrations, test y audit. La base de datos
+        # la provee el service container de arriba, así que no hace falta
+        # levantar compose.
+        run: make verify
+
+      - name: Verificar que las skills vendorizadas están sincronizadas
+        # .claude/skills/ nunca se edita a mano: si el sync produce un diff,
+        # alguien lo tocó o el repo canónico avanzó sin actualizar aquí.
+        run: |
+          make skills-sync
+          git diff --exit-code -- .claude/skills .claude/SKILLS_VERSION

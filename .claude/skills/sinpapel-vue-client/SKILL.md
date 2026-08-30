@@ -1,0 +1,120 @@
+---
+name: sinpapel-vue-client
+description: Usar siempre que el usuario cree o use el cliente REST JS de sinpapel-vue (createSinpapelClient), llame uno de sus 11 métodos (availableTransitions, history, previewTransition, getMetadatos, patchMetadatos, slaStatus, listDocumentos, uploadDocumento, deleteDocumento, requisitos, transition), mapee llamadas a los endpoints de sinpapel-drf, cancele requests con AbortController/signal, o use buildTransitionRequest / buildDocumentoUpload para codificar el payload (JSON vs multipart FIEL / multipart de documentos).
+tested_against:
+  - sinpapel-vue@0.4.0
+  - sinpapel-drf==0.4.5
+applies_to:
+  - "**/sinpapel-vue/**"
+  - "**/client/sinpapelClient.js"
+---
+
+# sinpapel-vue — cliente REST
+
+## Crear el cliente
+
+```js
+import { createSinpapelClient } from '@aprendomx/sinpapel-vue'
+
+const client = createSinpapelClient({
+  axios: http,                 // requerido (lanza si falta)
+  basePath: '/sinpapel/api',   // default
+  resource: 'solicitudes',     // requerido (lanza si falta)
+  pk: 42,                      // mutable: client.pk = 7
+  signal,                      // opcional: AbortController.signal
+})
+```
+
+`createSinpapelClient` lanza `Error` si falta `axios` o `resource`. La URL
+base se calcula en cada llamada: `{basePath}/{resource}/{pk}` (lee
+`client.resource`/`client.pk` en vivo).
+
+## Métodos → endpoints sinpapel-drf
+
+| Método | HTTP | Ruta | Body / params |
+|---|---|---|---|
+| `availableTransitions()` | GET | `…/available-transitions/` | — |
+| `history({page, pageSize})` | GET | `…/history/` | params `page`, `page_size` |
+| `previewTransition(targetState, {signal})` | POST | `…/preview-transition/` | `{ target_state }` — con sinpapel-drf ≥ 0.4.4 el reporte incluye `firma_requerida` |
+| `getMetadatos()` | GET | `…/metadatos/` | — |
+| `patchMetadatos(values)` | PATCH | `…/metadatos/` | `values` |
+| `slaStatus()` | POST | `…/sla-status/` | `null` |
+| `listDocumentos()` | GET | `…/documentos/` | — |
+| `uploadDocumento(payload)` | POST | `…/documentos/` | multipart (`buildDocumentoUpload`) |
+| `deleteDocumento(docId)` | DELETE | `…/documentos/{docId}/` | — |
+| `requisitos()` | GET | `…/requisitos/` | — |
+| `transition(payload)` | POST | `…/transition/` | JSON o multipart |
+
+Cada método retorna `data` de axios. Todos propagan `signal` si se pasó al
+crear el cliente. Los cuatro métodos de documentos (`listDocumentos`,
+`uploadDocumento`, `deleteDocumento`, `requisitos`) requieren `sinpapel-drf
+>= 0.3.0`. Con `sinpapel-drf >= 0.4.0`, `requisitos()` devuelve además
+`tipo_documento_id` y `documentos_disponibles` (`[{id, nombre}]`) por requisito
+documental, para selects dependientes (lo consume `DocumentosPanel`).
+
+## Carga de documentos — `buildDocumentoUpload`
+
+`uploadDocumento(payload)` codifica el `FormData` con `buildDocumentoUpload`.
+El payload acepta `archivo` (File/Blob, requerido) más `documento` (PK) **o**
+`tipo_documento` (PK), y los opcionales `porcentaje` y `metadatos`:
+
+```js
+await client.uploadDocumento({
+  archivo: file,            // File/Blob
+  tipo_documento: 3,        // o documento: 12
+  porcentaje: 100,          // opcional, default 100 en el backend
+  metadatos: { folio: 'A-12' },  // se serializa a JSON
+})
+```
+
+`buildDocumentoUpload` omite los opcionales `null`/`undefined` (para que el
+serializer use sus defaults) y JSON-encodea `metadatos` (el `JSONField` de
+DRF lo parsea desde el string multipart). Devuelve `{ body, config }` con
+`Content-Type: multipart/form-data`; normalmente no lo llamas directo.
+
+## Payload de transición — `buildTransitionRequest`
+
+El body usa **snake_case**: `target_state`, `comentarios`, `condiciones`, y
+opcional `signature`. *(sinpapel-vue 0.3.0 eliminó `monto_aprobado`, alineado
+con sinpapel 0.7.0.)*
+
+- **FIEL server-side** (`signature.backend==='fiel'` y
+  `signature.mode==='server-side'`) → `multipart/form-data` con claves DRF
+  punteadas: `signature.backend`, `signature.mode`, `signature.cer_file`,
+  `signature.key_file`, `signature.password`.
+- **Todo lo demás** → JSON con el bloque `signature` anidado.
+
+```js
+// JSON (fake/manual/fiel client-side o sin firma):
+await client.transition({
+  target_state: 'APROBADA',
+  comentarios: 'OK',
+  signature: { backend: 'fake' },
+})
+```
+
+`buildTransitionRequest(payload)` devuelve `{ body, config }`; normalmente no
+lo llamas tú directo — `transition()` lo usa internamente. La forma del
+bloque `signature` la produce `buildSignaturePayload` (ver
+`sinpapel-vue-store`).
+
+## Cancelación
+
+Pasa `signal` (de un `AbortController`) al crear el cliente y se propaga a
+cada request. El store (`sinpapel-vue-store`) ya gestiona esto con
+`cancel()`; usa el cliente crudo con `signal` solo si manejas axios a mano.
+
+## Errores
+
+El cliente **no normaliza** errores: deja propagar el error de axios. Lee
+`e.response?.data` (o `{ detail: e.message }` como fallback). La
+normalización vive en el store/composable.
+
+## Anti-patrones
+
+- ❌ Enviar camelCase al backend (`targetState`). Usa snake_case.
+- ❌ Armar el `FormData` multipart a mano: pasa `signature` y deja que
+  `buildTransitionRequest` decida JSON vs multipart.
+- ❌ Asumir que `history()` siempre pagina: puede venir array plano o
+  `{results, count}` (lo normaliza el store).
+- ❌ Crear el cliente sin `axios`/`resource` (lanza en construcción).
