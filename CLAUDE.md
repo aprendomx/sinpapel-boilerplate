@@ -160,13 +160,30 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
   (arreglado en sinpapel 0.8.4). Con default, `requerido` no aporta nada:
   `errores()` nunca ve el campo vacío.
 
+## Los tres comandos
+
+El flujo de trabajo del template son tres slash commands, en
+`.claude/commands/sinpapel/`:
+
+| Comando | Qué hace |
+|---|---|
+| `/sinpapel:especificar` | Descripción en lenguaje natural → `spec/`. **No escribe código.** |
+| `/sinpapel:generar` | `spec/` → la app del trámite, copiando la slice canónica |
+| `/sinpapel:verificar` | Corre los gates e interpreta lo que falle |
+
+La separación es deliberada: especificar y generar son decisiones distintas, y
+la primera se aprueba antes de que exista una línea de código.
+
 ## Comandos
 
 ```bash
 make install   # venv del backend + npm ci del frontend
 make up        # levanta db + backend + frontend
 make db        # solo la base de datos (suficiente para make verify)
+make seed      # una dependencia y una cuenta por rol (solo con DEBUG)
 make verify    # todos los gates — la única puerta
+make designer  # construye sinpapel-designer en designer/dist/
+make e2e       # el trámite completo por la UI (necesita `up` + `seed`)
 make down      # detiene el stack
 ```
 
