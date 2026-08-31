@@ -97,6 +97,11 @@ jobs:
           path: e2e/playwright-report/
           retention-days: 7
 
+      - name: Gate deploy-smoke
+        # El compose de producción estaba documentado y nunca se levantaba. Va
+        # después del e2e porque tarda minutos y usa el mismo docker.
+        run: make deploy-smoke
+
       - name: Verificar que las skills vendorizadas están sincronizadas
         # .claude/skills/ nunca se edita a mano: si el sync produce un diff,
         # alguien lo tocó o el repo canónico avanzó sin actualizar aquí.

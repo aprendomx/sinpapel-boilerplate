@@ -9,7 +9,7 @@ PIP     := uv pip install --python backend/.venv
 .DEFAULT_GOAL := help
 .PHONY: help install up down db seed logs verify lint test migrations parity \
         roundtrip api-roles coverage audit e2e rename rename-check \
-        designer skills-sync clean lock lockfile deploy
+        designer skills-sync clean lock lockfile deploy deploy-smoke
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -140,6 +140,9 @@ seed: .env ## Datos de demostración: una dependencia y una cuenta por rol
 
 e2e: ## Playwright: el trámite completo, de captura a resolución firmada
 	cd e2e && npm run test
+
+deploy-smoke: ## Levanta el compose de producción, lo comprueba y lo baja
+	./ops/ci/deploy-smoke.sh
 
 rename: ## Renombra el proyecto: make rename NAME=<slug>
 	./ops/ci/rename.py "$(NAME)"

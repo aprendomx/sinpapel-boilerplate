@@ -93,6 +93,7 @@ Dos gates corren aparte porque montan un entorno completo y tardan minutos:
 |---|---|
 | `e2e` | `make up && make seed && make e2e` — el trámite completo por la UI real |
 | `rename` | `make rename-check` — copia el repo, lo renombra y exige que siga verde |
+| `deploy-smoke` | `make deploy-smoke` — levanta el compose de producción, comprueba que migra, queda sano y sigue exigiendo TLS |
 
 **`parity` es el que impide la deriva.** Los flujos son datos, y su verdad vive
 en `spec/flujos/`. Si alguien añade una transición por el admin, toca la

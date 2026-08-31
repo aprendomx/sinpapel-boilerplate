@@ -60,9 +60,17 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
+      # La cabecera no es opcional: `SECURE_SSL_REDIRECT` responde 301 a https,
+      # urllib sigue la redirección y termina intentando TLS contra un gunicorn
+      # en texto plano —«SSL: WRONG_VERSION_NUMBER»—, así que el contenedor
+      # quedaba unhealthy para siempre y con él `up --wait` y cualquier
+      # `depends_on: service_healthy`. Declararse detrás del proxy TLS es lo que
+      # hace el proxy real, y coincide con `SECURE_PROXY_SSL_HEADER`.
       test:
         - CMD-SHELL
-        - python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/salud/')"
+        - >-
+          python -c "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/salud/',
+          headers={'X-Forwarded-Proto': 'https'}))"
       interval: 15s
       timeout: 5s
       retries: 10
