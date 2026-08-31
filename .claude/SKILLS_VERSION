@@ -1,7 +1,7 @@
 # Skills vendorizadas desde aprendomx/sinpapel-skills
 # Regenerar con: make skills-sync  (NUNCA editar .claude/skills/ a mano)
 source_repo=https://github.com/aprendomx/sinpapel-skills
-source_commit=4bec74a49638a33d9256523bc2a10706cafb8130
-source_commit_date=2026-08-28T15:15:06-06:00
+source_commit=dcdebf719095e71fe938cbfa3a8c26483c0657e7
+source_commit_date=2026-08-30T21:32:13-06:00
 source_path=dist/claude/skills
 skills_count=20
