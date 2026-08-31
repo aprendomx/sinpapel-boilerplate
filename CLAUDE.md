@@ -138,6 +138,12 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
   puebla desde la imagen la primera vez. Tras añadir una dependencia, el
   volumen viejo shadowea el nuevo; el `frontend.Dockerfile` lo detecta
   comparando un marcador que vive DENTRO del volumen y reinstala solo.
+- **El entorno del shell gana sobre `--env-file`** en la interpolación de
+  compose. Es útil para sobrescribir un puerto en CI, y es una trampa cuando no
+  se busca: el humo del despliegue tomaba el `DATABASE_URL` del job de CI en vez
+  del suyo y moría con «connection refused» contra `localhost:5432`. Si un
+  script necesita que sus valores manden, tiene que **exportarlos**, no ponerlos
+  en un archivo.
 - **`make up` reconstruye siempre** (`--build`): sin eso, compose reutiliza la
   imagen y los cambios del Dockerfile no llegan nunca al contenedor.
 - **Los tests de pantalla montan dentro de un `QLayout`.** Un `q-page` fuera de

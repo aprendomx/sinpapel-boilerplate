@@ -23,8 +23,15 @@ TRABAJO="$(mktemp -d)"
 # el stack de desarrollo y `down -v` se llevaría por delante la base de trabajo.
 PROYECTO="sinpapel-boilerplate-smoke"
 
+# Las variables que el compose declara con `:?`. Se nombran para poder
+# limpiarlas: en CI varias vienen definidas a nivel de job.
+REQUERIDAS=(
+  DJANGO_SECRET_KEY DJANGO_ALLOWED_HOSTS DJANGO_CSRF_TRUSTED_ORIGINS
+  DATABASE_URL POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD FIEL_CA_BUNDLE
+)
+
 compose() {
-  docker compose -p "$PROYECTO" -f "$COMPOSE_FILE" --env-file "$TRABAJO/.env.prod" "$@"
+  docker compose -p "$PROYECTO" -f "$COMPOSE_FILE" "$@"
 }
 
 limpiar() {
@@ -60,12 +67,26 @@ EOF
 echo "→ las variables obligatorias fallan ruidosamente si faltan"
 # El compose las declara con `:?`. Se comprueba de verdad, porque un `:?` mal
 # escrito no se nota hasta que alguien despliega sin esa variable.
+#
+# Con `env -u`: en CI varias de estas vienen del entorno del job y, si se dejan
+# puestas, satisfacen los guardias y este check pasaría en falso.
+sin_entorno=()
+for var in "${REQUERIDAS[@]}"; do sin_entorno+=(-u "$var"); done
 : > "$TRABAJO/.env.vacio"
-if docker compose -p "${PROYECTO}-vacio" -f "$COMPOSE_FILE" \
+if env "${sin_entorno[@]}" docker compose -p "${PROYECTO}-vacio" -f "$COMPOSE_FILE" \
   --env-file "$TRABAJO/.env.vacio" config >/dev/null 2>&1; then
   fallar "el compose acepta un entorno vacío: los guardias \`:?\` no protegen"
 fi
 echo "  ✓ sin entorno, el compose se niega a resolver"
+
+# El entorno del shell GANA sobre `--env-file` en la interpolación de compose.
+# En CI eso hacía que el backend del humo tomara el DATABASE_URL del job
+# —apuntando al service container— en vez del suyo, y muriera con «connection
+# refused» contra localhost:5432. Exportar es lo único que da precedencia.
+set -a
+# shellcheck disable=SC1091
+. "$TRABAJO/.env.prod"
+set +a
 
 echo "→ levantando el stack de producción"
 compose up -d --build --wait --wait-timeout 300 \
