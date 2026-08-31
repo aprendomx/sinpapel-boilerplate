@@ -17,7 +17,10 @@ WORKDIR /app
 # pyproject.toml presente falla con "package directory 'apps' does not exist".
 COPY backend/ ./
 
-RUN pip install --no-cache-dir -e ".[dev]"
+# Desde el lock, igual que `make install`: si el contenedor resolviera por su
+# cuenta, podría correr con versiones distintas de las que pasaron los gates.
+RUN pip install --no-cache-dir -r requirements.lock \
+    && pip install --no-cache-dir -e . --no-deps
 
 EXPOSE 8000
 

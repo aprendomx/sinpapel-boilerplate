@@ -9,15 +9,23 @@ PIP     := uv pip install --python backend/.venv
 .DEFAULT_GOAL := help
 .PHONY: help install up down db seed logs verify lint test migrations parity \
         roundtrip api-roles coverage audit e2e rename rename-check \
-        designer skills-sync clean
+        designer skills-sync clean lock lockfile deploy
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 install: ## Crea el venv del backend e instala dependencias (backend + frontend)
-	uv venv --python 3.12 backend/.venv
-	$(PIP) -e "backend[dev]"
+	# --clear: sin él `uv venv` aborta si el venv ya existe, asi que `make
+	# install` solo funcionaba una vez, en un clon limpio. El CI nunca lo
+	# noto porque siempre parte de cero.
+	uv venv --clear --python 3.12 backend/.venv
+	# Desde el lock, no resolviendo: sin esto cada instalación puede traer algo
+	# distinto. Ocurrió de verdad — al publicarse sinpapel-drf 0.4.6 el CI
+	# empezó a usarlo el mismo día, sin que nadie lo hubiera probado.
+	$(PIP) -r backend/requirements.lock
+	# El propio backend, editable y sin dependencias: ya las puso el lock.
+	$(PIP) -e backend --no-deps
 	cd frontend && npm ci
 
 up: .env ## Levanta el stack completo (db + backend + frontend)
@@ -46,11 +54,16 @@ db: .env ## Levanta solo la base de datos (suficiente para `make verify`)
 logs: .env ## Sigue los logs del stack
 	$(COMPOSE) logs -f
 
+lock: ## Regenera backend/requirements.lock desde backend/pyproject.toml
+	uv pip compile backend/pyproject.toml --extra dev --universal --no-header \
+		--quiet -o backend/requirements.lock
+	@printf '\033[33m→ lock regenerado; revisa el diff antes de commitear\033[0m\n'
+
 # ─── Gates ───────────────────────────────────────────────────────────────────
 # `verify` es la única puerta: ningún trabajo se considera terminado sin que
 # pase entera. Cada gate es un check real, no un eco.
 
-verify: lint migrations test parity roundtrip api-roles coverage audit ## Corre todos los gates
+verify: lint lockfile migrations deploy test parity roundtrip api-roles coverage audit ## Corre todos los gates
 	@printf '\033[32m✓ make verify en verde\033[0m\n'
 
 lint: ## ruff (backend) + eslint (frontend)
@@ -58,9 +71,34 @@ lint: ## ruff (backend) + eslint (frontend)
 	backend/.venv/bin/ruff format --check backend
 	cd frontend && npm run lint
 
+lockfile: ## Verifica que el lock siga correspondiendo al pyproject
+	# Mismo espíritu que `migrations`: declarar una dependencia y olvidar
+	# regenerar el lock deja el pyproject y lo instalado diciendo cosas
+	# distintas, y el que manda es el lock.
+	@uv pip compile backend/pyproject.toml --extra dev --universal --no-header \
+		--quiet -o /tmp/requirements.lock.check
+	@diff -u backend/requirements.lock /tmp/requirements.lock.check \
+		|| { printf '\033[31m✗ requirements.lock no corresponde al pyproject; corre `make lock`\033[0m\n'; exit 1; }
+	@printf '  ✓ lock al día\n'
+
 migrations: ## Verifica que no haya migraciones sin generar
 	cd backend && DJANGO_SETTINGS_MODULE=config.settings.test \
 		.venv/bin/python manage.py makemigrations --check --dry-run
+
+deploy: ## Los checks de despliegue de Django contra el settings de producción
+	# config/settings/prod.py no se importaba en ningún test ni gate: un error
+	# ahí no aparecía hasta el despliegue, que es el peor sitio. Esto lo carga
+	# de verdad y corre `check --deploy`, que audita HSTS, cookies seguras,
+	# redirección SSL y la fortaleza del SECRET_KEY.
+	#
+	# Los valores son de mentira y solo viven en esta línea; la llave es larga
+	# a propósito porque Django avisa (W009) de las de menos de 50 caracteres,
+	# y ese aviso es real: aquí lo silenciaría el ruido, en producción no.
+	cd backend && DJANGO_SETTINGS_MODULE=config.settings.prod \
+		DJANGO_SECRET_KEY='gate-de-verificacion-no-es-una-llave-real-solo-para-check-deploy' \
+		DJANGO_ALLOWED_HOSTS='tramites.example.mx' \
+		SINPAPEL_FIEL_TRUSTED_CA_BUNDLE='/etc/sinpapel/sat-ca-bundle.pem' \
+		.venv/bin/python manage.py check --deploy --fail-level WARNING
 
 test: ## Suite de tests (backend + frontend)
 	cd backend && .venv/bin/python -m pytest
@@ -76,9 +114,12 @@ roundtrip: ## Export -> import de cada flujo no pierde ningún campo
 api-roles: ## Cada endpoint responde 200/403 según el rol, para los cinco roles
 	cd backend && .venv/bin/python -m pytest tests/api -q
 
-coverage: ## Cobertura mínima del 85 % en la slice canónica
+coverage: ## Cobertura mínima del 90 % en todo el backend
+	# Medía solo la slice canónica, y eso dejaba fuera código que sí importa:
+	# `spec_io/views.py` estaba al 54 % —con el guardia contra escapes del
+	# directorio del designer sin un solo test— y el gate no lo veía.
 	cd backend && .venv/bin/python -m pytest -q \
-		--cov=apps.tramite_ejemplo --cov-report=term-missing --cov-fail-under=85
+		--cov=apps --cov=config --cov-report=term-missing --cov-fail-under=90
 
 audit: ## Vulnerabilidades conocidas + integridad de los pines del ecosistema
 	# --skip-editable omite el propio backend, que se instala en modo editable

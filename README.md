@@ -49,7 +49,7 @@ Requisitos: Python 3.12, Node 22, Docker con Compose v2 y
 
 ```bash
 cp .env.example .env    # ajusta POSTGRES_PORT si ya tienes un PostgreSQL local
-make install            # venv del backend + npm ci del frontend
+make install            # venv del backend (desde el lock) + npm ci del frontend
 make up                 # db + backend + frontend
 make seed               # una dependencia y una cuenta por rol
 ```
@@ -77,12 +77,14 @@ terminado sin que pase entera. Cada gate es una verificación real.
 | Gate | Qué comprueba |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check` en el backend, `eslint` en el frontend |
+| `lockfile` | `backend/requirements.lock` sigue correspondiendo al `pyproject.toml` |
 | `migrations` | `makemigrations --check --dry-run` limpio: no hay migraciones sin generar |
+| `deploy` | `check --deploy` de Django contra `config/settings/prod.py`: HSTS, cookies seguras, redirección SSL |
 | `test` | `pytest` (backend) y `vitest` (frontend) |
 | `parity` | La base de datos coincide exactamente con `spec/flujos/*.json` |
 | `roundtrip` | Export → import de cada flujo no pierde ningún campo |
 | `api-roles` | Cada endpoint expuesto responde 200/403 según el rol, para los cinco roles |
-| `coverage` | Cobertura mínima del 85 % en `apps/tramite_ejemplo` |
+| `coverage` | Cobertura mínima del 90 % en todo el backend (hoy: 96 %) |
 | `audit` | `pip-audit`, `npm audit` y la integridad de los pines, incluido el tag del designer |
 
 Dos gates corren aparte porque montan un entorno completo y tardan minutos:

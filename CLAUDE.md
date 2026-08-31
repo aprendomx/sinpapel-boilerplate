@@ -194,8 +194,13 @@ make down      # detiene el stack
 
 El Makefile crece por fases: un target existe cuando lo que verifica es real.
 Nada de objetivos decorativos que pasan sin comprobar nada. Los gates activos
-hoy son `lint`, `migrations`, `test`, `parity`, `roundtrip`, `api-roles`,
-`coverage` y `audit`.
+hoy son `lint`, `lockfile`, `migrations`, `deploy`, `test`, `parity`,
+`roundtrip`, `api-roles`, `coverage` y `audit`.
+
+Las dependencias del backend se instalan desde `backend/requirements.lock`, no
+resolviendo el `pyproject.toml`. Al tocar una dependencia hay que correr
+`make lock` y commitear el resultado: el gate `lockfile` falla si divergen,
+igual que `migrations` con los modelos.
 
 `e2e` y `rename-check` corren aparte: el primero necesita el stack levantado
 (`make up` + `make seed`) y el segundo monta un entorno completo desde cero, así

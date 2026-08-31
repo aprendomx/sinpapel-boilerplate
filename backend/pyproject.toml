@@ -42,7 +42,19 @@ addopts = "--strict-markers"
 
 [tool.coverage.run]
 branch = true
-omit = ["*/migrations/*", "*/tests/*"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    # Entrypoints de servidor: los ejecuta gunicorn, no la suite. Medirlos solo
+    # produce un 0% permanente que hay que aprender a ignorar, y un umbral que
+    # se ignora deja de ser un umbral.
+    "*/wsgi.py",
+    "*/asgi.py",
+    # Los settings sí se ejercitan, pero fuera de este proceso: `test.py` es el
+    # que corre la suite, y `prod.py` lo carga el gate `deploy` con
+    # `check --deploy`. Contarlos aquí mediría el proceso equivocado.
+    "*/settings/*",
+]
 
 [tool.ruff]
 target-version = "py312"
