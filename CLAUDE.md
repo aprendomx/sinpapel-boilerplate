@@ -213,6 +213,12 @@ resolviendo el `pyproject.toml`. Al tocar una dependencia hay que correr
 `make lock` y commitear el resultado: el gate `lockfile` falla si divergen,
 igual que `migrations` con los modelos.
 
+La fuente de verdad es `backend/uv.lock`; `requirements.lock` es su exportación
+para pip, que es lo que instala el contenedor. El gate usa `uv lock --check`,
+que compara contra el `pyproject` y **no** contra el índice: recompilar con
+`uv pip compile` haría fallar el gate cada vez que cualquier dependencia
+transitiva publique una versión nueva, con un lock perfectamente válido.
+
 `e2e` y `rename-check` corren aparte: el primero necesita el stack levantado
 (`make up` + `make seed`) y el segundo monta un entorno completo desde cero, así
 que tardan minutos y en CI van como jobs propios.

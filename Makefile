@@ -54,9 +54,12 @@ db: .env ## Levanta solo la base de datos (suficiente para `make verify`)
 logs: .env ## Sigue los logs del stack
 	$(COMPOSE) logs -f
 
-lock: ## Regenera backend/requirements.lock desde backend/pyproject.toml
-	uv pip compile backend/pyproject.toml --extra dev --universal --no-header \
-		--no-annotate --quiet -o backend/requirements.lock
+lock: ## Regenera el lock del backend desde backend/pyproject.toml
+	# `uv.lock` es la fuente de verdad; `requirements.lock` es su exportación
+	# para pip, que es lo que instala el contenedor.
+	cd backend && uv lock
+	cd backend && uv export --frozen --all-extras --no-emit-project \
+		--format requirements-txt --no-header --quiet -o requirements.lock
 	@printf '\033[33m→ lock regenerado; revisa el diff antes de commitear\033[0m\n'
 
 # ─── Gates ───────────────────────────────────────────────────────────────────
@@ -75,13 +78,19 @@ lockfile: ## Verifica que el lock siga correspondiendo al pyproject
 	# Mismo espíritu que `migrations`: declarar una dependencia y olvidar
 	# regenerar el lock deja el pyproject y lo instalado diciendo cosas
 	# distintas, y el que manda es el lock.
-	# --no-annotate: los comentarios `# via` los agrega cada versión de uv a su
-	# manera, asi que compararlos hacía fallar el gate por ruido —los pines eran
-	# idénticos— cuando la uv del CI no coincidía con la local.
-	@uv pip compile backend/pyproject.toml --extra dev --universal --no-header \
-		--no-annotate --quiet -o /tmp/requirements.lock.check
+	#
+	# `uv lock --check` compara contra el pyproject, NO contra el índice. La
+	# primera versión de este gate recompilaba con `uv pip compile`, que vuelve
+	# a resolver: bastó con que filelock publicara 3.32.5 para que el CI fallara
+	# con un lock perfectamente válido. Un gate que se rompe por una release
+	# ajena se aprende a ignorar.
+	cd backend && uv lock --check
+	# El requirements exportado se deriva del uv.lock sin resolver nada, así que
+	# esta comparación tampoco toca la red.
+	@cd backend && uv export --frozen --all-extras --no-emit-project \
+		--format requirements-txt --no-header --quiet -o /tmp/requirements.lock.check
 	@diff -u backend/requirements.lock /tmp/requirements.lock.check \
-		|| { printf '\033[31m✗ requirements.lock no corresponde al pyproject; corre `make lock`\033[0m\n'; exit 1; }
+		|| { printf '\033[31m✗ requirements.lock no corresponde al uv.lock; corre `make lock`\033[0m\n'; exit 1; }
 	@printf '  ✓ lock al día\n'
 
 migrations: ## Verifica que no haya migraciones sin generar
