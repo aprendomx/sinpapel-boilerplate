@@ -24,7 +24,14 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/backend.Dockerfile
-    command: python manage.py runserver 0.0.0.0:8000
+    # Migrar al arrancar, igual que el compose de producción. Sin esto, en una
+    # base recién creada `make up && make seed` —el arranque que documenta el
+    # README— falla con "relation does not exist": el healthcheck de /salud/ no
+    # toca la base, así que el contenedor se declara sano y el fallo aparece
+    # después, lejos de su causa.
+    command: >-
+      sh -c "python manage.py migrate --noinput
+      && python manage.py runserver 0.0.0.0:8000"
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.dev
       DATABASE_URL: postgres://${POSTGRES_USER:-sinpapel}:${POSTGRES_PASSWORD:-sinpapel}@db:5432/${POSTGRES_DB:-sinpapel}

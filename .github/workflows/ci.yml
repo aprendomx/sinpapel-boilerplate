@@ -69,6 +69,16 @@ jobs:
       - name: Gate e2e
         # Necesita el stack real: es la única prueba que ejercita a la vez el
         # frontend, el proxy, la sesión, el CSRF y el motor.
+        #
+        # El .env no está versionado y `make up` lo crea desde .env.example, así
+        # que este paso recorre exactamente el camino de un clon limpio. No se
+        # añade aquí un `cp` a mano: dejaría verde en CI un arranque que a una
+        # persona le seguiría fallando.
+        env:
+          # El compose publica la base en el puerto del host y el 5432 ya lo
+          # ocupa el service container de arriba. El backend habla con `db:5432`
+          # por la red de compose, así que solo cambia la publicación.
+          POSTGRES_PORT: "5433"
         run: |
           make up
           make seed

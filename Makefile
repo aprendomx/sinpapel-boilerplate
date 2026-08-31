@@ -20,7 +20,7 @@ install: ## Crea el venv del backend e instala dependencias (backend + frontend)
 	$(PIP) -e "backend[dev]"
 	cd frontend && npm ci
 
-up: ## Levanta el stack completo (db + backend + frontend)
+up: .env ## Levanta el stack completo (db + backend + frontend)
 	# --build no es opcional: sin él, compose reutiliza la imagen existente y
 	# los cambios en el Dockerfile o en las dependencias no llegan nunca al
 	# contenedor. Con la caché de capas cuesta segundos.
@@ -28,13 +28,22 @@ up: ## Levanta el stack completo (db + backend + frontend)
 	@echo "backend  http://localhost:8000/salud/"
 	@echo "frontend http://localhost:5173"
 
-down: ## Detiene el stack y conserva los volúmenes
+# El .env se crea solo si falta. `git clone && make up` tiene que funcionar:
+# es la promesa del template, y hasta ahora el primer comando moría con el
+# "couldn't find env file" de docker, que no dice qué hacer. No se sobrescribe
+# uno existente, y no toca producción: ese despliegue usa su propio .env.prod
+# explícito (ops/deploy/) y falla si le falta cualquier variable.
+.env:
+	@cp .env.example $@
+	@printf '\033[33m→ .env creado desde .env.example (valores de desarrollo)\033[0m\n'
+
+down: .env ## Detiene el stack y conserva los volúmenes
 	$(COMPOSE) down
 
-db: ## Levanta solo la base de datos (suficiente para `make verify`)
+db: .env ## Levanta solo la base de datos (suficiente para `make verify`)
 	$(COMPOSE) up -d --wait db
 
-logs: ## Sigue los logs del stack
+logs: .env ## Sigue los logs del stack
 	$(COMPOSE) logs -f
 
 # ─── Gates ───────────────────────────────────────────────────────────────────
@@ -82,7 +91,7 @@ audit: ## Vulnerabilidades conocidas + integridad de los pines del ecosistema
 
 # ─── Utilidades ──────────────────────────────────────────────────────────────
 
-seed: ## Datos de demostración: una dependencia y una cuenta por rol
+seed: .env ## Datos de demostración: una dependencia y una cuenta por rol
 	$(COMPOSE) exec backend python manage.py seed_demo
 
 e2e: ## Playwright: el trámite completo, de captura a resolución firmada
