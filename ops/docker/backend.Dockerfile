@@ -19,8 +19,16 @@ COPY backend/ ./
 
 # Desde el lock, igual que `make install`: si el contenedor resolviera por su
 # cuenta, podría correr con versiones distintas de las que pasaron los gates.
-RUN pip install --no-cache-dir -r requirements.lock \
-    && pip install --no-cache-dir -e . --no-deps
+# El requirements se deriva de uv.lock aquí, en el build, en vez de versionar un
+# archivo aparte: uno derivado obliga a regenerarlo a mano en cada PR que toque
+# dependencias —los de Dependabot incluidos—, y un gate que rompe todos los PRs
+# automáticos se acaba desactivando.
+COPY --from=ghcr.io/astral-sh/uv:0.10.10 /uv /usr/local/bin/uv
+RUN uv export --frozen --all-extras --no-emit-project \
+    --format requirements-txt -o /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt \
+    && pip install --no-cache-dir -e . --no-deps \
+    && rm /tmp/requirements.txt
 
 EXPOSE 8000
 

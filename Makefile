@@ -16,16 +16,11 @@ help: ## Muestra esta ayuda
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 install: ## Crea el venv del backend e instala dependencias (backend + frontend)
-	# --clear: sin él `uv venv` aborta si el venv ya existe, asi que `make
-	# install` solo funcionaba una vez, en un clon limpio. El CI nunca lo
-	# noto porque siempre parte de cero.
-	uv venv --clear --python 3.12 backend/.venv
-	# Desde el lock, no resolviendo: sin esto cada instalación puede traer algo
-	# distinto. Ocurrió de verdad — al publicarse sinpapel-drf 0.4.6 el CI
-	# empezó a usarlo el mismo día, sin que nadie lo hubiera probado.
-	$(PIP) -r backend/requirements.lock
-	# El propio backend, editable y sin dependencias: ya las puso el lock.
-	$(PIP) -e backend --no-deps
+	# `uv sync` crea el venv, instala EXACTAMENTE lo que fija uv.lock e instala
+	# el proyecto en editable. `--frozen` es lo que impide que resuelva por su
+	# cuenta: sin el lock, cada instalación podía traer algo distinto, y llegó a
+	# pasar —al publicarse sinpapel-drf 0.4.6 el CI empezó a usarlo el mismo día.
+	cd backend && uv sync --frozen --all-extras
 	cd frontend && npm ci
 
 up: .env ## Levanta el stack completo (db + backend + frontend)
@@ -54,12 +49,8 @@ db: .env ## Levanta solo la base de datos (suficiente para `make verify`)
 logs: .env ## Sigue los logs del stack
 	$(COMPOSE) logs -f
 
-lock: ## Regenera el lock del backend desde backend/pyproject.toml
-	# `uv.lock` es la fuente de verdad; `requirements.lock` es su exportación
-	# para pip, que es lo que instala el contenedor.
+lock: ## Regenera backend/uv.lock desde backend/pyproject.toml
 	cd backend && uv lock
-	cd backend && uv export --frozen --all-extras --no-emit-project \
-		--format requirements-txt --no-header --quiet -o requirements.lock
 	@printf '\033[33m→ lock regenerado; revisa el diff antes de commitear\033[0m\n'
 
 # ─── Gates ───────────────────────────────────────────────────────────────────
@@ -85,13 +76,6 @@ lockfile: ## Verifica que el lock siga correspondiendo al pyproject
 	# con un lock perfectamente válido. Un gate que se rompe por una release
 	# ajena se aprende a ignorar.
 	cd backend && uv lock --check
-	# El requirements exportado se deriva del uv.lock sin resolver nada, así que
-	# esta comparación tampoco toca la red.
-	@cd backend && uv export --frozen --all-extras --no-emit-project \
-		--format requirements-txt --no-header --quiet -o /tmp/requirements.lock.check
-	@diff -u backend/requirements.lock /tmp/requirements.lock.check \
-		|| { printf '\033[31m✗ requirements.lock no corresponde al uv.lock; corre `make lock`\033[0m\n'; exit 1; }
-	@printf '  ✓ lock al día\n'
 
 migrations: ## Verifica que no haya migraciones sin generar
 	cd backend && DJANGO_SETTINGS_MODULE=config.settings.test \

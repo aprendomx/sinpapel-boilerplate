@@ -77,7 +77,7 @@ terminado sin que pase entera. Cada gate es una verificación real.
 | Gate | Qué comprueba |
 |---|---|
 | `lint` | `ruff check` + `ruff format --check` en el backend, `eslint` en el frontend |
-| `lockfile` | `backend/requirements.lock` sigue correspondiendo al `pyproject.toml` |
+| `lockfile` | `backend/uv.lock` sigue correspondiendo al `pyproject.toml` |
 | `migrations` | `makemigrations --check --dry-run` limpio: no hay migraciones sin generar |
 | `deploy` | `check --deploy` de Django contra `config/settings/prod.py`: HSTS, cookies seguras, redirección SSL |
 | `test` | `pytest` (backend) y `vitest` (frontend) |

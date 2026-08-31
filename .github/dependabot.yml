@@ -1,0 +1,85 @@
+# Actualizaciones de dependencias.
+#
+# El gate `audit` solo corre cuando alguien lanza `make verify`, así que una
+# vulnerabilidad publicada hoy es invisible hasta el próximo commit. Esto y el
+# job programado de `audit.yml` son las dos mitades del mismo problema:
+# Dependabot propone la actualización, el job avisa si aparece un CVE.
+#
+# Se agrupa por ecosistema a propósito. Un PR por dependencia genera decenas al
+# mes, y una bandeja que nadie mira es peor que no tener automatización: lo que
+# importa —una vulnerabilidad real— se pierde entre el ruido.
+version: 2
+
+updates:
+  # ─── Backend ────────────────────────────────────────────────────────────────
+  # `uv`, no `pip`: la fuente de verdad es backend/uv.lock, y son ecosistemas
+  # distintos para Dependabot.
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Las del ecosistema van juntas: se publican coordinadas y actualizarlas
+      # por separado deja combinaciones que nadie probó.
+      sinpapel:
+        patterns:
+          - sinpapel
+          - sinpapel-*
+      backend-menores:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Django mayor es una migración, no una actualización: el pin es
+      # `>=5.2,<6.0` y subirlo se decide, no se acepta desde un PR.
+      - dependency-name: django
+        update-types:
+          - version-update:semver-major
+
+  # ─── Frontend y e2e ─────────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      sinpapel-vue:
+        patterns:
+          - "@aprendomx/*"
+      frontend-menores:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      e2e:
+        patterns:
+          - "*"
+
+  # ─── Infraestructura ────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # Imágenes base de los Dockerfile y de los compose. El de producción fija
+  # PostGIS y la imagen de uv; que se queden atrás es deuda silenciosa.
+  - package-ecosystem: docker
+    directory: /ops/docker
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /ops/deploy
+    schedule:
+      interval: weekly

@@ -1,0 +1,95 @@
+name: Auditoría
+
+# El gate `audit` vive dentro de `make verify`, así que solo corre cuando
+# alguien commitea. Una vulnerabilidad publicada el martes en una dependencia
+# que nadie tocó es invisible hasta el siguiente commit — que en un repositorio
+# estable puede tardar semanas.
+#
+# Este job hace la pregunta al revés: sin cambiar nada, ¿el código que está
+# desplegado tiene hoy alguna vulnerabilidad conocida? Es la mitad que le falta
+# a Dependabot, que propone actualizaciones pero no avisa de lo que ya corre.
+on:
+  schedule:
+    # Lunes a las 09:00 UTC: temprano en la semana laboral de México, para que
+    # el aviso llegue con margen y no un viernes por la noche.
+    - cron: "0 9 * * 1"
+  # Para poder lanzarlo a mano tras un aviso de seguridad.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          # Misma versión que el CI: el lock se resuelve con ella.
+          version: "0.10.10"
+
+      - name: Instalar dependencias
+        run: make install
+
+      - name: Auditar
+        id: auditar
+        run: make audit
+
+      - name: Abrir un issue si hay vulnerabilidades
+        # Un job rojo en un cron no avisa a nadie: nadie mira la pestaña de
+        # Actions un lunes. El issue sí notifica.
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const titulo = 'Auditoría semanal: vulnerabilidades en las dependencias'
+            const abiertos = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'seguridad',
+            })
+            // Sin esto se abriría un issue idéntico cada lunes hasta que alguien
+            // lo atienda, y la repetición es justo lo que hace que se ignore.
+            if (abiertos.data.some((i) => i.title === titulo)) {
+              core.info('Ya hay un issue abierto; no se duplica.')
+              return
+            }
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}` +
+              `/actions/runs/${context.runId}`
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: titulo,
+              labels: ['seguridad'],
+              body: [
+                'La auditoría programada encontró vulnerabilidades conocidas en las',
+                'dependencias del proyecto.',
+                '',
+                `Salida completa: ${url}`,
+                '',
+                'Para reproducirlo en local:',
+                '',
+                '```bash',
+                'make install && make audit',
+                '```',
+                '',
+                'Si la corrección exige subir una dependencia, actualiza también el',
+                'lock con `make lock`: el gate `lockfile` falla si divergen.',
+              ].join('\n'),
+            })
