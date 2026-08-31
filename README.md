@@ -176,4 +176,15 @@ de origen queda en `.claude/SKILLS_VERSION` y se actualizan con
 
 ## Licencia
 
+Copyright (C) 2024-2026 Julio Adrián <jadrian.s@gmail.com>
+
+Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo los
+términos de la GNU General Public License publicada por la Free Software
+Foundation, en su versión 3 o (a tu elección) cualquier versión posterior.
+
+Se distribuye con la esperanza de que sea útil, pero **SIN NINGUNA GARANTÍA**;
+ni siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA UN
+PROPÓSITO PARTICULAR. Consulta la [GNU General Public License](LICENSE) para
+más detalles.
+
 GPL-3.0-or-later, igual que `sinpapel`.
