@@ -1,7 +1,9 @@
-# Skills vendorizadas desde aprendomx/sinpapel-skills
-# Regenerar con: make skills-sync  (NUNCA editar .claude/skills/ a mano)
+# Skills y comandos vendorizados desde aprendomx/sinpapel-skills
+# Regenerar con: make skills-sync
+# NUNCA editar .claude/skills/ ni .claude/commands/ a mano
 source_repo=https://github.com/aprendomx/sinpapel-skills
-source_commit=dcdebf719095e71fe938cbfa3a8c26483c0657e7
-source_commit_date=2026-08-30T21:32:13-06:00
-source_path=dist/claude/skills
+source_commit=7639bd7c0457e76913628c2ad9a30ba926704784
+source_commit_date=2026-08-31T17:14:39-06:00
+source_path=dist/claude
 skills_count=20
+commands_count=3

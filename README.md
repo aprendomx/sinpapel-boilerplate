@@ -32,7 +32,8 @@ enseña en prosa para que lo apruebes. El segundo copia la slice canónica y la
 adapta. El tercero verifica.
 
 Los tres viven en `.claude/commands/sinpapel/` y puedes leerlos: son
-instrucciones, no magia.
+instrucciones, no magia. Se vendorizan desde `sinpapel-skills`, así que el flujo
+es el mismo en cualquier proyecto construido sobre el framework.
 
 A mano, el camino es el mismo:
 
@@ -125,7 +126,7 @@ intacto el del framework —que aparece en imports, settings `SINPAPEL_*` y ruta
 
 ```
 ├── .claude/
-│   ├── commands/sinpapel/     Los tres comandos slash
+│   ├── commands/sinpapel/     Los tres comandos slash (vendorizados)
 │   └── skills/                Skills de sinpapel vendorizadas (make skills-sync)
 ├── spec/
 │   ├── sistema.yaml           Identidad, roles y trámites
@@ -180,9 +181,12 @@ Lee [CLAUDE.md](CLAUDE.md) antes de tocar código: las reglas duras del
 repositorio y las trampas verificadas del framework, varias de las cuales no
 producen ningún error visible cuando se incumplen.
 
-Las 20 skills de `sinpapel` están vendorizadas en `.claude/skills/`; el commit
-de origen queda en `.claude/SKILLS_VERSION` y se actualizan con
-`make skills-sync`. **Nunca se editan a mano.**
+Las 20 skills de `sinpapel` y los tres slash commands están vendorizados en
+`.claude/skills/` y `.claude/commands/`; el commit de origen queda en
+`.claude/SKILLS_VERSION` y se actualizan con `make skills-sync`. **Nunca se
+editan a mano**: la fuente vive en
+[aprendomx/sinpapel-skills](https://github.com/aprendomx/sinpapel-skills) y el
+CI falla si divergen.
 
 ## Licencia
 

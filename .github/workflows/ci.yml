@@ -102,9 +102,10 @@ jobs:
         # después del e2e porque tarda minutos y usa el mismo docker.
         run: make deploy-smoke
 
-      - name: Verificar que las skills vendorizadas están sincronizadas
-        # .claude/skills/ nunca se edita a mano: si el sync produce un diff,
-        # alguien lo tocó o el repo canónico avanzó sin actualizar aquí.
+      - name: Verificar que lo vendorizado está sincronizado
+        # .claude/skills/ y .claude/commands/ nunca se editan a mano: si el sync
+        # produce un diff, alguien los tocó o el repo canónico avanzó sin
+        # actualizar aquí.
         run: |
           make skills-sync
-          git diff --exit-code -- .claude/skills .claude/SKILLS_VERSION
+          git diff --exit-code -- .claude/skills .claude/commands .claude/SKILLS_VERSION

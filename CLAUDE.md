@@ -31,12 +31,14 @@ Editar un flujo es: descargar el JSON, editarlo (a mano o en el designer),
 guardarlo en `spec/flujos/` y **aplicarlo con una data migration**. Guardar el
 archivo no toca la base; `parity` falla mientras no coincidan.
 
-### Nunca edites `.claude/skills/` a mano
+### Nunca edites `.claude/skills/` ni `.claude/commands/` a mano
 
 Es contenido vendorizado desde
-[aprendomx/sinpapel-skills](https://github.com/aprendomx/sinpapel-skills). Los
-cambios van al repo canónico; aquí se regeneran con `make skills-sync`. El
-commit de origen queda en `.claude/SKILLS_VERSION`.
+[aprendomx/sinpapel-skills](https://github.com/aprendomx/sinpapel-skills): las
+skills desde `skills/<nombre>/SKILL.md` y los slash commands desde
+`commands/sinpapel/<nombre>.md`. Los cambios van al repo canónico; aquí se
+regeneran con `make skills-sync`. El commit de origen queda en
+`.claude/SKILLS_VERSION`, y el CI falla si lo vendorizado y la fuente divergen.
 
 ### `WorkflowService` no existe
 
@@ -179,8 +181,8 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
 
 ## Los tres comandos
 
-El flujo de trabajo del template son tres slash commands, en
-`.claude/commands/sinpapel/`:
+El flujo de trabajo del template son tres slash commands, vendorizados en
+`.claude/commands/sinpapel/` desde `sinpapel-skills` (se editan allá, no aquí):
 
 | Comando | Qué hace |
 |---|---|
