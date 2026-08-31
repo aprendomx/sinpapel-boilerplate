@@ -1,0 +1,182 @@
+name: Compatibilidad
+
+# Dos comprobaciones que no dependen de que nadie commitee aquí: lo que pueden
+# romper está fuera del repositorio. Por eso van en un job programado y no en
+# el CI de cada push, donde solo añadirían minutos sin mirar nada nuevo.
+#
+#   designer  — el gate `audit` verifica que el TAG pineado sea el correcto,
+#               pero nunca que el build funcione. Si el repo upstream cambia su
+#               configuración, mueve su directorio de salida o rompe sus
+#               dependencias, se descubre cuando alguien corre `make designer`.
+#
+#   django    — aviso temprano de la siguiente mayor. El pin es `>=5.2,<6.0` y
+#               subirlo es una migración que se decide; esto solo responde
+#               "¿cuánto falta?" antes de que la decisión sea urgente.
+on:
+  schedule:
+    # Lunes, una hora después de la auditoría: si las dos fallan, los issues
+    # llegan separados y se leen mejor.
+    - cron: "0 10 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  designer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Construir el designer desde el tag pineado
+        run: make designer
+
+      - name: Avisar si el build dejó de funcionar
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const titulo = 'El build del designer dejó de funcionar'
+            const cuerpo = [
+              '`make designer` falla desde el tag pineado en',
+              '`ops/ci/build-designer.sh`. Lo que se sirve bajo `/designer/` no se',
+              'puede reconstruir.',
+              '',
+              'Causas habituales: el repositorio upstream movió su directorio de',
+              'salida, cambió `quasar.config.js` —el script parchea su bloque',
+              '`build:`— o alguna de sus dependencias se rompió.',
+              '',
+              `Salida completa: ${context.serverUrl}/${context.repo.owner}/` +
+                `${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join('\n')
+            const abiertos = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'designer',
+            })
+            if (abiertos.data.some((i) => i.title === titulo)) return
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: titulo, labels: ['designer'], body: cuerpo,
+            })
+
+  django-siguiente:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: sinpapel
+          POSTGRES_USER: sinpapel
+          POSTGRES_PASSWORD: sinpapel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sinpapel -d sinpapel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://sinpapel:sinpapel@localhost:5432/sinpapel
+      DJANGO_SECRET_KEY: ci-no-usar-en-produccion
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "0.10.10"
+
+      - name: Instalar dependencias
+        run: make install
+
+      - name: Forzar la siguiente mayor de Django
+        # Fuera del lock a propósito: la pregunta es justamente qué pasaría con
+        # una version que el pin no permite. No se toca pyproject ni uv.lock.
+        run: |
+          uv pip install --python backend/.venv "Django>=6.0,<7.0"
+          backend/.venv/bin/python -c \
+            "from importlib.metadata import version; print('Django', version('Django'))"
+
+      - name: Correr la suite
+        id: suite
+        run: |
+          # pipefail no viene puesto en el shell por defecto de Actions, y sin
+          # él el `| tee` haría que el exit code fuera el de tee: una suite en
+          # rojo pasaría por verde.
+          set -o pipefail
+          cd backend
+          .venv/bin/python -m pytest -q -W 'default::DeprecationWarning' \
+            2>&1 | tee /tmp/suite.log
+
+      - name: Resumir lo que Django va a quitar
+        # La señal útil no es solo que pase o falle: cuando pasa, los avisos
+        # `RemovedInDjangoXX` son la lista de trabajo de la migración. Al correr
+        # esto por primera vez la suite pasaba entera en Django 6.1 y el único
+        # hallazgo fue justo uno de estos —EMAIL_BACKEND hacia MAILERS—, que sin
+        # destacarlo se habría perdido entre la salida.
+        if: always()
+        run: |
+          {
+            echo "## Avisos de retirada de Django"
+            echo
+            if grep -qE 'RemovedInDjango[0-9]+Warning' /tmp/suite.log; then
+              echo '```'
+              grep -hoE 'RemovedInDjango[0-9]+Warning: .*' /tmp/suite.log | sort -u
+              echo '```'
+            else
+              echo "Ninguno."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Avisar de lo que rompe
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const titulo = 'Django 6 rompe la suite'
+            const cuerpo = [
+              'La comprobación semanal contra la siguiente mayor de Django falla.',
+              '',
+              '**No es urgente**: el pin es `>=5.2,<6.0` y nada de lo desplegado',
+              'usa Django 6. Este aviso existe para que la migración se planee con',
+              'la lista de roturas delante, en vez de descubrirlas el día que 5.2',
+              'deje de recibir soporte.',
+              '',
+              `Salida completa: ${context.serverUrl}/${context.repo.owner}/` +
+                `${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              'Reproducir en local:',
+              '',
+              '```bash',
+              'make install',
+              'uv pip install --python backend/.venv "Django>=6.0,<7.0"',
+              'cd backend && .venv/bin/python -m pytest -q',
+              '```',
+            ].join('\n')
+            const abiertos = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'compatibilidad',
+            })
+            if (abiertos.data.some((i) => i.title === titulo)) return
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: titulo, labels: ['compatibilidad'], body: cuerpo,
+            })

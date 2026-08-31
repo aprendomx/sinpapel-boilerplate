@@ -101,6 +101,13 @@ migración de siembra o edita el JSON sin volver a sembrar, el sistema en
 ejecución deja de ser el declarado en el repositorio y nada más lo detectaría
 ([ADR-0003](spec/decisiones/0003-la-verdad-de-los-flujos-vive-en-spec.md)).
 
+Y tres comprobaciones corren **programadas los lunes**, porque lo que pueden
+detectar ocurre sin que nadie commitee aquí: una vulnerabilidad publicada en una
+dependencia que nadie tocó, el build del designer roto por un cambio upstream, o
+la siguiente mayor de Django. Cada una abre un issue si falla — un job rojo en
+un cron no avisa a nadie. Dependabot propone las actualizaciones agrupadas por
+ecosistema.
+
 Los gates crecen con el proyecto: un target aparece en el Makefile cuando lo
 que verifica existe. No hay objetivos decorativos que pasen sin comprobar nada.
 
