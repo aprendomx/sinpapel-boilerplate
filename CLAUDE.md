@@ -104,6 +104,12 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
 - **Los side effects corren post-commit** y el motor **no** les reenvía los
   kwargs de la transición (`comentarios`, `condiciones`, `ip_address`); si los
   necesitas, léelos del `SeguimientoWorkflow` más reciente.
+- **`available_transitions` NO filtra por permisos del usuario**, pese a recibir
+  uno: devuelve todas las salidas del estado actual y su propio docstring lo
+  dice —«eso lo hace `can_transition_to`»—. La consecuencia visible es que el
+  panel ofrece transiciones que la persona no puede ejecutar y el rechazo llega
+  al confirmar, como 403. La autoridad está en la ejecución, no en el menú: no
+  escribas una prueba que asuma que el menú ya filtró.
 - **JSON Logic solo ve** `instance.pk`, `meta.<key>`, `user.id` y
   `user.username`. Para condicionar sobre otros campos del modelo, usa el
   backend `django_orm`.
@@ -153,6 +159,11 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
 - **El login de la aplicación está en `/cuentas/login/`**, no en el admin: el
   admin solo deja entrar a cuentas `is_staff`, y de los cinco roles solo uno
   lo es.
+- **La librería bloquea el envío en el cliente si la transición exige firma** y
+  no se eligió backend (`useTransition.validate()`). En un e2e eso significa que
+  la petición no llega a salir: esperar la respuesta HTTP se cuelga hasta el
+  timeout, y lo que se estaría probando es la validación del formulario, no lo
+  que responde el motor.
 - **La librería humaniza los nombres de estado** al mostrarlos (`EN_REVISION`
   se pinta «EN REVISION»), y deja todas las pestañas en el DOM ocultas con
   `display:none`. En un e2e, selecciona por `value` y acota a lo visible.

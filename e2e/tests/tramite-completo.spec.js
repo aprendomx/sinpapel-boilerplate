@@ -1,5 +1,16 @@
 import { expect, test } from '@playwright/test'
 
+import {
+  adjuntar,
+  comoSeVe,
+  crearSolicitud,
+  entrarComo,
+  panel,
+  pestana,
+  textoVisible,
+  transicionar,
+} from '../helpers.js'
+
 /**
  * El trámite completo: de la captura a la resolución firmada.
  *
@@ -13,164 +24,13 @@ import { expect, test } from '@playwright/test'
  * Varias de esas piezas solo fallan cuando se juntan.
  */
 
-const CONTRASENA = 'demo12345'
 const CURP = 'BEBB020202MDFXXX07'
-
-async function entrarComo(page, usuario) {
-  // Se limpian las cookies en vez de visitar el logout: desde Django 5 exige
-  // POST, así que un GET no cierra nada y el login siguiente redirigiría con la
-  // sesión anterior todavía viva.
-  await page.context().clearCookies()
-
-  // Por el login de la aplicación, no por el del admin: éste solo deja entrar a
-  // cuentas `is_staff`, y de los cuatro roles que recorre esta prueba solo uno
-  // lo es.
-  await page.goto('/cuentas/login/?next=/')
-  await page.locator('#id_username').fill(usuario)
-  await page.locator('#id_password').fill(CONTRASENA)
-  await page.locator('button[type=submit]').click()
-
-  // Se comprueba que la sesión quedó abierta en vez de confiar en un
-  // `networkidle`: con credenciales incorrectas Django devuelve otra vez el
-  // formulario con un 200 y la prueba seguiría con una sesión anónima.
-  await page.waitForURL((u) => !u.pathname.startsWith('/cuentas/login'))
-}
-
-function panel(page) {
-  return page.locator('.sp-panel')
-}
-
-/**
- * Texto visible dentro del panel.
- *
- * El panel deja TODAS las pestañas en el DOM y oculta las inactivas con
- * `display: none`, así que un `getByText` normal alcanza contenido de pestañas
- * que nadie está viendo — incluidas las `<option>` de los formularios de carga.
- */
-function textoVisible(page, texto) {
-  return panel(page).locator('.sp-panel__body *:visible', { hasText: texto })
-}
-
-/** Un estado tal como lo PINTA la librería, que sustituye el guion bajo. */
-function comoSeVe(estado) {
-  return new RegExp(estado.replace(/_/g, '[ _]'))
-}
-
-/** Abre el diálogo de transición, lo llena y confirma. */
-async function transicionar(page, destino, { firma = null, comentario = '' } = {}) {
-  await page.waitForLoadState('networkidle')
-
-  // `.last()` porque el remontaje del panel puede dejar un diálogo anterior en
-  // el DOM; el recién montado es el que se ve.
-  const dialogo = page.locator('.sp-dialog').last()
-  const estados = dialogo.locator('select').first()
-
-  // Abrir el diálogo puede no prender a la primera si el panel se está
-  // remontando: se reintenta en vez de fallar por un adelanto de milisegundos.
-  await expect(async () => {
-    if (!(await estados.isVisible())) {
-      await panel(page).getByRole('button', { name: 'Cambiar estado' }).click()
-    }
-    await expect(estados).toBeVisible({ timeout: 2000 })
-  }).toPass({ timeout: 20000 })
-
-  // Por `value`, no por etiqueta: la librería humaniza los nombres para
-  // mostrarlos (`EN_REVISION` se pinta como «EN REVISION»), así que buscar por
-  // texto nunca encontraría un estado con guion bajo.
-  await estados.selectOption({ value: destino })
-  if (comentario) {
-    await dialogo.locator('textarea').first().fill(comentario)
-  }
-  if (firma) {
-    // Firma polimórfica. En pruebas el backend usa FakeBackend; esta misma UI
-    // ofrece FIEL en producción.
-    await dialogo.locator('select').last().selectOption({ value: firma })
-  }
-
-  const respuesta = page.waitForResponse(
-    (r) => r.url().includes('/transition/') && r.request().method() === 'POST',
-  )
-  await dialogo.getByRole('button', { name: 'Confirmar' }).click()
-  const resultado = await respuesta
-  expect(resultado.status(), await resultado.text()).toBe(201)
-  await expect(dialogo).toBeHidden()
-
-  // Tras la transición la pantalla relee la solicitud y remonta el panel, que
-  // vuelve a pedir sus datos. Esperar a que la red se calme evita pulsar una
-  // pestaña sobre el panel a medio remontar, que la reiniciaría.
-  await page.waitForLoadState('networkidle')
-}
-
-/**
- * Selecciona una pestaña del panel y espera a que cargue su contenido.
- *
- * Cada pestaña consulta su propio endpoint al activarse; sin esperarlo, la
- * aserción siguiente correría sobre el panel todavía vacío.
- */
-const ENDPOINT_DE_PESTANA = {
-  Historial: '/history/',
-  Requisitos: '/requisitos/',
-  Documentos: '/documentos/',
-  Metadatos: '/metadatos/',
-}
-
-async function pestana(page, nombre) {
-  // El panel se remonta tras cada transición: pulsar mientras tanto reiniciaría
-  // la pestaña activa.
-  await page.waitForLoadState('networkidle')
-
-  const boton = panel(page).getByRole('button', { name: nombre, exact: true })
-  await expect(boton).toBeVisible()
-
-  // Si la pestaña ya está activa no se dispara ninguna petición, así que
-  // esperarla colgaría el test hasta el timeout.
-  const yaActiva = (await boton.getAttribute('class'))?.includes('is-active')
-  if (yaActiva) {
-    return
-  }
-
-  // La espera se registra ANTES del clic: la petición sale al activarse la
-  // pestaña, y `networkidle` ya se habría cumplido para entonces. Sin ella se
-  // asertaría sobre un panel que todavía dice "Cargando…".
-  //
-  // Acotada, porque no todas las pestañas piden algo al activarse: alguna carga
-  // sus datos al montar el panel. Es un acelerador, no un requisito — las
-  // aserciones que siguen reintentan por su cuenta.
-  const endpoint = ENDPOINT_DE_PESTANA[nombre]
-  const respuesta = endpoint
-    ? page
-        .waitForResponse((r) => r.url().includes(endpoint), { timeout: 5000 })
-        .catch(() => null)
-    : Promise.resolve(null)
-  await boton.click()
-  await respuesta
-}
 
 test('de BORRADOR a APROBADA, con expediente completo y firma', async ({ page }) => {
   // ─── Solicitante: captura y presenta ──────────────────────────────────────
   await entrarComo(page, 'ana')
 
-  // El catálogo de dependencias llega por API: sin esperarlo, el select se
-  // abriría vacío. La espera se registra ANTES de navegar, por lo mismo que en
-  // `pestana()`: la petición la lanza el componente al montarse, y si la
-  // respuesta llega antes de que `goto` resuelva, un `waitForResponse` posterior
-  // no la ve y se queda colgado hasta el timeout. En local el orden salía a
-  // favor y en CI no: el test pasaba aquí y fallaba allí.
-  const dependencias = page.waitForResponse((r) => r.url().includes('/dependencias/'))
-  await page.goto('/solicitudes/nueva')
-  await dependencias
-
-  // Quasar reenvía `data-test` al input nativo, no al contenedor. En un
-  // `q-select` ese input es el combobox: al pulsarlo despliega las opciones en
-  // un portal (`.q-menu`), fuera del árbol del campo.
-  await page.locator('[data-test=campo-dependencia]').click()
-  await page.locator('.q-menu .q-item').first().click()
-  await page.locator('[data-test=campo-curp]').fill(CURP)
-  await page.locator('[data-test=enviar]').click()
-
-  await page.waitForURL(/\/solicitudes\/\d+$/)
-  const url = page.url()
-  const folio = (await page.locator('[data-test=folio]').textContent()).trim()
+  const { url, folio } = await crearSolicitud(page, CURP)
   expect(folio).toMatch(/^SC-\d{4}-\d{6}$/)
 
   await transicionar(page, 'RECIBIDA', { comentario: 'Presento mi solicitud.' })
@@ -239,25 +99,3 @@ test('de BORRADOR a APROBADA, con expediente completo y firma', async ({ page })
     await expect(historial).toContainText(actor)
   }
 })
-
-/** Sube un documento del tipo indicado desde el panel de documentos. */
-async function adjuntar(page, tipo) {
-  await pestana(page, 'Documentos')
-  const documentos = page.locator('.sp-panel')
-
-  await documentos.locator('select').first().selectOption({ label: tipo })
-  await documentos
-    .locator('input[type=file]')
-    .setInputFiles({
-      name: `${tipo}.pdf`,
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('%PDF-1.4\n% documento de prueba\n'),
-    })
-
-  const subida = page.waitForResponse(
-    (r) => r.url().includes('/documentos/') && r.request().method() === 'POST',
-  )
-  await documentos.getByRole('button', { name: /Subir|Cargar/i }).click()
-  const respuesta = await subida
-  expect(respuesta.status(), await respuesta.text()).toBe(201)
-}
