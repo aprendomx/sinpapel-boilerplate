@@ -150,10 +150,15 @@ test('de BORRADOR a APROBADA, con expediente completo y firma', async ({ page })
   // ─── Solicitante: captura y presenta ──────────────────────────────────────
   await entrarComo(page, 'ana')
 
-  await page.goto('/solicitudes/nueva')
   // El catálogo de dependencias llega por API: sin esperarlo, el select se
-  // abriría vacío.
-  await page.waitForResponse((r) => r.url().includes('/dependencias/'))
+  // abriría vacío. La espera se registra ANTES de navegar, por lo mismo que en
+  // `pestana()`: la petición la lanza el componente al montarse, y si la
+  // respuesta llega antes de que `goto` resuelva, un `waitForResponse` posterior
+  // no la ve y se queda colgado hasta el timeout. En local el orden salía a
+  // favor y en CI no: el test pasaba aquí y fallaba allí.
+  const dependencias = page.waitForResponse((r) => r.url().includes('/dependencias/'))
+  await page.goto('/solicitudes/nueva')
+  await dependencias
 
   // Quasar reenvía `data-test` al input nativo, no al contenedor. En un
   // `q-select` ese input es el combobox: al pulsarlo despliega las opciones en
