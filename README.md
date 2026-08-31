@@ -140,8 +140,8 @@ Pineadas y verificadas. El gate `audit` falla si cambian sin actualizar
 `ops/ci/check-pins.sh` y `spec/decisiones/`.
 
 ```
-sinpapel~=0.8.4          @aprendomx/sinpapel-vue ^0.4.0
-sinpapel-drf~=0.4.5      sinpapel-designer v0.1.0 (pineado en ops/ci/build-designer.sh)
+sinpapel~=0.8.4          @aprendomx/sinpapel-vue ^0.4.1
+sinpapel-drf~=0.4.6      sinpapel-designer v0.1.0 (pineado en ops/ci/build-designer.sh)
 sinpapel-webhooks~=0.2.4 Django>=5.2,<6.0 · Python 3.12
 sinpapel-reports~=0.2.4
 ```
