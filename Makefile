@@ -56,7 +56,7 @@ logs: .env ## Sigue los logs del stack
 
 lock: ## Regenera backend/requirements.lock desde backend/pyproject.toml
 	uv pip compile backend/pyproject.toml --extra dev --universal --no-header \
-		--quiet -o backend/requirements.lock
+		--no-annotate --quiet -o backend/requirements.lock
 	@printf '\033[33m→ lock regenerado; revisa el diff antes de commitear\033[0m\n'
 
 # ─── Gates ───────────────────────────────────────────────────────────────────
@@ -75,8 +75,11 @@ lockfile: ## Verifica que el lock siga correspondiendo al pyproject
 	# Mismo espíritu que `migrations`: declarar una dependencia y olvidar
 	# regenerar el lock deja el pyproject y lo instalado diciendo cosas
 	# distintas, y el que manda es el lock.
+	# --no-annotate: los comentarios `# via` los agrega cada versión de uv a su
+	# manera, asi que compararlos hacía fallar el gate por ruido —los pines eran
+	# idénticos— cuando la uv del CI no coincidía con la local.
 	@uv pip compile backend/pyproject.toml --extra dev --universal --no-header \
-		--quiet -o /tmp/requirements.lock.check
+		--no-annotate --quiet -o /tmp/requirements.lock.check
 	@diff -u backend/requirements.lock /tmp/requirements.lock.check \
 		|| { printf '\033[31m✗ requirements.lock no corresponde al pyproject; corre `make lock`\033[0m\n'; exit 1; }
 	@printf '  ✓ lock al día\n'

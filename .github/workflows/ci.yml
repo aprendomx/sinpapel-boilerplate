@@ -49,6 +49,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # Pineada a propósito: sin esto el CI instala la última uv, y el
+          # resolutor puede cambiar bajo los pies — justo la no-determinación
+          # que el lockfile existe para evitar. Subirla es una decisión, no un
+          # efecto secundario; al hacerlo hay que correr `make lock`.
+          version: "0.10.10"
 
       - name: Instalar dependencias
         run: make install

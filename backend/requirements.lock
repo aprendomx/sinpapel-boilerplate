@@ -1,159 +1,62 @@
 asgiref==3.12.1
-    # via django
 boolean-py==5.0
-    # via license-expression
 cachecontrol==0.14.4
-    # via pip-audit
 certifi==2026.7.22
-    # via requests
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
-    # via cryptography
 charset-normalizer==3.5.1
-    # via
-    #   reportlab
-    #   requests
 colorama==0.4.6 ; sys_platform == 'win32'
-    # via pytest
 coverage==7.16.0
-    # via pytest-cov
 cryptography==50.0.1
-    # via sinpapel
 cyclonedx-python-lib==11.12.0
-    # via pip-audit
 defusedxml==0.7.1
-    # via py-serializable
 django==5.2.17
-    # via
-    #   sinpapel-boilerplate-backend (backend/pyproject.toml)
-    #   django-simple-history
-    #   djangorestframework
-    #   sinpapel
-    #   sinpapel-reports
 django-environ==0.12.1
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 django-simple-history==3.13.0
-    # via
-    #   sinpapel
-    #   sinpapel-webhooks
 djangorestframework==3.18.0
-    # via
-    #   sinpapel-boilerplate-backend (backend/pyproject.toml)
-    #   sinpapel-drf
 docxtpl==0.20.2
-    # via sinpapel-reports
 filelock==3.32.4
-    # via cachecontrol
 gunicorn==23.0.0
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 idna==3.19
-    # via requests
 iniconfig==2.3.0
-    # via pytest
 jinja2==3.1.6
-    # via docxtpl
 license-expression==30.4.4
-    # via cyclonedx-python-lib
 lxml==6.1.2
-    # via
-    #   docxtpl
-    #   python-docx
 markdown-it-py==4.2.0
-    # via rich
 markupsafe==3.0.3
-    # via jinja2
 mdurl==0.1.2
-    # via markdown-it-py
 msgpack==1.2.2
-    # via cachecontrol
 packageurl-python==0.17.6
-    # via cyclonedx-python-lib
 packaging==26.3
-    # via
-    #   gunicorn
-    #   pip-audit
-    #   pip-requirements-parser
-    #   pytest
 pillow==12.3.0
-    # via
-    #   reportlab
-    #   sinpapel
 pip==26.2.1
-    # via pip-api
 pip-api==0.0.34
-    # via pip-audit
 pip-audit==2.10.1
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 pip-requirements-parser==32.0.1
-    # via pip-audit
 platformdirs==4.11.5
-    # via pip-audit
 pluggy==1.6.0
-    # via
-    #   pytest
-    #   pytest-cov
 psycopg==3.3.4
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 psycopg-binary==3.3.4 ; implementation_name != 'pypy'
-    # via psycopg
 py-serializable==2.1.0
-    # via cyclonedx-python-lib
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
-    # via cffi
 pygments==2.21.0
-    # via
-    #   pytest
-    #   rich
 pyparsing==3.3.2
-    # via pip-requirements-parser
 pypdf==6.16.2
-    # via sinpapel-reports
 pytest==9.1.1
-    # via
-    #   sinpapel-boilerplate-backend (backend/pyproject.toml)
-    #   pytest-cov
-    #   pytest-django
 pytest-cov==7.1.0
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 pytest-django==4.14.0
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 python-docx==1.2.0
-    # via docxtpl
 reportlab==5.0.1
-    # via sinpapel-reports
 requests==2.34.2
-    # via
-    #   cachecontrol
-    #   pip-audit
-    #   sinpapel-webhooks
 rich==15.0.0
-    # via pip-audit
 ruff==0.16.5
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 sinpapel==0.8.4
-    # via
-    #   sinpapel-boilerplate-backend (backend/pyproject.toml)
-    #   sinpapel-drf
-    #   sinpapel-reports
-    #   sinpapel-webhooks
 sinpapel-drf==0.4.6
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 sinpapel-reports==0.2.4
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 sinpapel-webhooks==0.2.4
-    # via sinpapel-boilerplate-backend (backend/pyproject.toml)
 sortedcontainers==2.4.0
-    # via cyclonedx-python-lib
 sqlparse==0.6.0
-    # via django
 tomli==2.4.1
-    # via pip-audit
 tomli-w==1.2.0
-    # via pip-audit
 typing-extensions==4.16.0
-    # via python-docx
 tzdata==2026.3 ; sys_platform == 'win32'
-    # via
-    #   django
-    #   psycopg
 urllib3==2.7.0
-    # via requests
