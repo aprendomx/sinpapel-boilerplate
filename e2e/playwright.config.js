@@ -9,6 +9,10 @@ const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
 
 export default defineConfig({
   testDir: './tests',
+  // Comprueba que el stack está levantado y sembrado antes de correr nada: sin
+  // esto, los tres fallos de entorno más frecuentes se manifiestan como un
+  // timeout esperando un selector, que no dice nada de la causa.
+  globalSetup: './global-setup.js',
   // Un solo worker: los tests comparten la base de datos del stack y se pisan
   // los folios y los estados si corren en paralelo.
   workers: 1,

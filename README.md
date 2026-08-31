@@ -83,7 +83,7 @@ terminado sin que pase entera. Cada gate es una verificación real.
 | `roundtrip` | Export → import de cada flujo no pierde ningún campo |
 | `api-roles` | Cada endpoint expuesto responde 200/403 según el rol, para los cinco roles |
 | `coverage` | Cobertura mínima del 85 % en `apps/tramite_ejemplo` |
-| `audit` | `pip-audit`, `npm audit` y la integridad de los pines del ecosistema |
+| `audit` | `pip-audit`, `npm audit` y la integridad de los pines, incluido el tag del designer |
 
 Dos gates corren aparte porque montan un entorno completo y tardan minutos:
 
@@ -141,7 +141,7 @@ Pineadas y verificadas. El gate `audit` falla si cambian sin actualizar
 
 ```
 sinpapel~=0.8.4          @aprendomx/sinpapel-vue ^0.4.0
-sinpapel-drf~=0.4.5      sinpapel-designer v0.1.0
+sinpapel-drf~=0.4.5      sinpapel-designer v0.1.0 (pineado en ops/ci/build-designer.sh)
 sinpapel-webhooks~=0.2.4 Django>=5.2,<6.0 · Python 3.12
 sinpapel-reports~=0.2.4
 ```

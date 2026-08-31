@@ -48,8 +48,11 @@ el requisito a medias. Son las que importan y las que nadie escribe.
 **`migrations`** — hay cambios de modelo sin migración generada.
 
 **`audit`** — o hay una vulnerabilidad conocida, o los pines del ecosistema se
-movieron. Si un pin cambió a propósito, actualiza también
+movieron. Comprueba lo declarado y lo realmente instalado, más el tag del
+designer. Si un pin cambió a propósito, actualiza también
 `ops/ci/check-pins.sh` y deja un ADR.
+
+Si se queja del bundle del designer, basta con `make designer`.
 
 **`e2e`** — es el único que ejercita frontend, proxy, sesión, CSRF, motor,
 firma y side effects a la vez. Un fallo aquí suele estar en las costuras, no en

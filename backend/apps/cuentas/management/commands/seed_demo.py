@@ -76,12 +76,18 @@ class Command(BaseCommand):
                     "is_superuser": es_staff,
                 },
             )
-            if creado:
-                usuario.set_password(CONTRASENA)
-                usuario.save()
+            # La contraseña se fija SIEMPRE, no solo al crear: son cuentas de
+            # demostración con una contraseña conocida por definición, y si
+            # alguien la cambió el comando tiene que poder repararlas. De lo
+            # contrario `make seed` no arregla la cuenta rota y el consejo que
+            # da el preflight del e2e no sirve de nada.
+            usuario.set_password(CONTRASENA)
+            usuario.is_active = True
+            usuario.save()
             usuario.groups.add(Group.objects.get(name=rol))
             Adscripcion.objects.get_or_create(usuario=usuario, dependencia=dependencia)
-            self.stdout.write(f"  {'creada ' if creado else 'existía'}  {username} ({rol})")
+            estado = "creada " if creado else "repuesta"
+            self.stdout.write(f"  {estado}  {username} ({rol})")
 
         if opciones["con_solicitud"]:
             self._crear_solicitud(Usuario.objects.get(username="ana"), dependencia)

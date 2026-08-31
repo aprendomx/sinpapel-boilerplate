@@ -11,6 +11,11 @@ Ni el código fuente ni el bundle se versionan aquí — `dist/` está en
 make designer     # clona v0.1.0, construye y deja el bundle en dist/spa/
 ```
 
+El tag lo comprueba el gate `audit`: verifica que `build-designer.sh` siga
+pineando la versión verificada y que, si el bundle está construido, sea de ese
+mismo tag. Un `make designer` con `SINPAPEL_DESIGNER_REF` apuntando a otra cosa
+deja servido algo distinto de lo declarado, y sin el gate no se notaría.
+
 Después está en <http://localhost:8000/designer/> (requiere una cuenta staff).
 
 ## Cómo editar un flujo

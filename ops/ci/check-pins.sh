@@ -47,6 +47,35 @@ case "$instalada_vue" in
          fallos=$((fallos + 1)) ;;
 esac
 
+echo "→ pin de sinpapel-designer"
+# El designer no es una dependencia declarada: se clona de un tag y se
+# construye. El pin vive en el script de build, así que sin comprobarlo aquí un
+# cambio de tag pasaría inadvertido — y lo que se sirve bajo /designer/ dejaría
+# de ser la versión verificada.
+DESIGNER_ESPERADO="v0.1.0"
+if grep -qF "SINPAPEL_DESIGNER_REF:-${DESIGNER_ESPERADO}" ops/ci/build-designer.sh; then
+  echo "  ✓ sinpapel-designer ${DESIGNER_ESPERADO}"
+else
+  echo "  ✗ ops/ci/build-designer.sh no pinea ${DESIGNER_ESPERADO}"
+  fallos=$((fallos + 1))
+fi
+
+# Si alguien ya lo construyó, el bundle tiene que ser de ese mismo tag: un
+# `make designer` con SINPAPEL_DESIGNER_REF apuntando a otra cosa deja servido
+# algo distinto de lo declarado.
+if [ -f designer/DESIGNER_VERSION ]; then
+  ref_construida="$(grep -E '^source_ref=' designer/DESIGNER_VERSION | cut -d= -f2-)"
+  if [ "$ref_construida" = "$DESIGNER_ESPERADO" ]; then
+    echo "  ✓ bundle construido desde ${ref_construida}"
+  else
+    echo "  ✗ el bundle es de '${ref_construida}', no de ${DESIGNER_ESPERADO}"
+    echo "    Reconstruye con: make designer"
+    fallos=$((fallos + 1))
+  fi
+else
+  echo "  · sin construir (make designer)"
+fi
+
 echo "→ versiones realmente instaladas en backend/.venv"
 if [ -x backend/.venv/bin/python ]; then
   backend/.venv/bin/python - <<'PY' || fallos=$((fallos + 1))
