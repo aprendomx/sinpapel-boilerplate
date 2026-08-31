@@ -1,0 +1,93 @@
+name: ${PROJECT_NAME:-sinpapel-boilerplate}
+
+# Despliegue de producción. Difiere del de desarrollo en cuatro cosas que
+# importan: gunicorn en vez de runserver, `spec/` montado read-only, el worker
+# de webhooks y el cron de SLA como servicios propios, y las llaves de firma
+# montadas desde fuera de la imagen.
+#
+#   docker compose -f ops/deploy/docker-compose.prod.yml --env-file .env.prod up -d
+
+x-backend: &backend
+  build:
+    context: ../..
+    dockerfile: ops/docker/backend.Dockerfile
+  environment: &backend-env
+    DJANGO_SETTINGS_MODULE: config.settings.prod
+    DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?falta DJANGO_SECRET_KEY}
+    DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?falta DJANGO_ALLOWED_HOSTS}
+    DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:?falta DJANGO_CSRF_TRUSTED_ORIGINS}
+    DATABASE_URL: ${DATABASE_URL:?falta DATABASE_URL}
+    SINPAPEL_WEBHOOKS_BACKEND: outbox
+    SINPAPEL_FIEL_TRUSTED_CA_BUNDLE: /etc/sinpapel/sat-ca-bundle.pem
+  volumes: &backend-volumes
+    # `spec/` es la verdad de los flujos y en producción NO se edita: un cambio
+    # en caliente saltaría la revisión y dejaría la base fuera de sincronía con
+    # el repositorio. El guardado del designer además está deshabilitado por
+    # DEBUG, así que esto es la segunda línea de defensa.
+    - ../../spec:/spec:ro
+    - media:/app/media
+    # Custodia de llaves: el bundle de ACs del SAT se monta desde el host y
+    # nunca entra a la imagen ni al repositorio. Ver ops/deploy/README.md.
+    - ${FIEL_CA_BUNDLE:?falta FIEL_CA_BUNDLE}:/etc/sinpapel/sat-ca-bundle.pem:ro
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?falta POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?falta POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    <<: *backend
+    command: >-
+      sh -c "python manage.py migrate --noinput
+      && python manage.py collectstatic --noinput
+      && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/salud/')"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  webhooks:
+    <<: *backend
+    # Con backend `outbox` las entregas quedan en la base esperando a este
+    # worker. Sin él se acumulan en `pending` para siempre, en silencio.
+    command: python manage.py sinpapel_webhooks_worker
+    ports: []
+
+  sla:
+    <<: *backend
+    # Cron del SLA. El motor no es event-driven: si nadie evalúa los plazos,
+    # ninguna solicitud vence nunca. Se ejecuta cada hora en un bucle en vez de
+    # con cron del sistema para no arrastrar un demonio más al contenedor.
+    command: >-
+      sh -c "while true; do
+      python manage.py sinpapel_verificar_slas;
+      sleep ${SLA_INTERVALO_SEGUNDOS:-3600};
+      done"
+    ports: []
+
+volumes:
+  db_data:
+  media:
+  backups:

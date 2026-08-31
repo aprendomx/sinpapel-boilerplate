@@ -139,6 +139,26 @@ Estas ya costaron tiempo. Están confirmadas contra `sinpapel 0.8.3`:
   descarta sus slots con nombre: en ambos casos el wrapper sale vacío sin un
   solo error. `tests/setup.js` registra los componentes a mano porque el
   transform del plugin de Vite no aplica en tests.
+- **`main.js` registra los componentes Quasar globalmente**, y no es opcional:
+  `@aprendomx/sinpapel-vue` viene precompilado y resuelve sus `q-form` /
+  `q-dialog` por nombre en tiempo de ejecución. Sin registrarlos el panel se
+  ve casi bien pero no hay `<form>` real, así que **ninguna transición ocurre**
+  y no aparece un solo error en consola.
+- **axios necesita los nombres de CSRF de Django** (`csrftoken` /
+  `X-CSRFToken`); los suyos por defecto son de otro framework y todo POST
+  responde 403. El health check lleva `@ensure_csrf_cookie` para que la cookie
+  exista antes del primer envío.
+- **`CSRF_TRUSTED_ORIGINS` es obligatorio con el proxy del dev server**, que
+  reescribe el `Host`. Sin él ni siquiera se puede iniciar sesión.
+- **El login de la aplicación está en `/cuentas/login/`**, no en el admin: el
+  admin solo deja entrar a cuentas `is_staff`, y de los cinco roles solo uno
+  lo es.
+- **La librería humaniza los nombres de estado** al mostrarlos (`EN_REVISION`
+  se pinta «EN REVISION»), y deja todas las pestañas en el DOM ocultas con
+  `display:none`. En un e2e, selecciona por `value` y acota a lo visible.
+- **`CampoMetadato` con `requerido=True` Y `default` rompía `/metadatos/`**
+  (arreglado en sinpapel 0.8.4). Con default, `requerido` no aporta nada:
+  `errores()` nunca ve el campo vacío.
 
 ## Comandos
 
@@ -160,4 +180,6 @@ Nada de objetivos decorativos que pasan sin comprobar nada. Los gates activos
 hoy son `lint`, `migrations`, `test`, `parity`, `roundtrip`, `api-roles`,
 `coverage` y `audit`.
 
-Faltan `e2e` y `rename`: llegan con la fase que los hace verificables.
+`e2e` y `rename-check` corren aparte: el primero necesita el stack levantado
+(`make up` + `make seed`) y el segundo monta un entorno completo desde cero, así
+que tardan minutos y en CI van como jobs propios.

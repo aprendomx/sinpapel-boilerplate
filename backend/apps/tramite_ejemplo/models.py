@@ -51,10 +51,15 @@ class SolicitudConstancia(MetadatosCapturables, Trazable):
             etiqueta=_("CURP"),
             ayuda=_("18 caracteres, como aparece en el documento oficial."),
         ),
+        # Sin `requerido=True` a propósito, aunque el valor sea obligatorio en
+        # la práctica: con `default`, `MetadatosProxy.errores()` nunca lo ve
+        # vacío, así que la marca no aporta nada — y `MetaFormFactory
+        # .build_serializer()` pasa ambos a DRF, que rechaza la combinación con
+        # "May not set both `required` and `default`". El resultado sería un 500
+        # en GET/PATCH de /metadatos/ para TODO el trámite.
         CampoMetadato(
             nombre="tipo_constancia",
             tipo=str,
-            requerido=True,
             choices=TIPOS_CONSTANCIA,
             default=TIPO_ESTUDIOS,
             etiqueta=_("Tipo de constancia"),

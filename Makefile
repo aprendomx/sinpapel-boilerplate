@@ -7,8 +7,9 @@ COMPOSE := docker compose --env-file .env -f ops/docker/docker-compose.yml
 PIP     := uv pip install --python backend/.venv
 
 .DEFAULT_GOAL := help
-.PHONY: help install up down db logs verify lint test migrations parity \
-        roundtrip api-roles coverage audit designer skills-sync clean
+.PHONY: help install up down db seed logs verify lint test migrations parity \
+        roundtrip api-roles coverage audit e2e rename rename-check \
+        designer skills-sync clean
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -80,6 +81,18 @@ audit: ## Vulnerabilidades conocidas + integridad de los pines del ecosistema
 	./ops/ci/check-pins.sh
 
 # ─── Utilidades ──────────────────────────────────────────────────────────────
+
+seed: ## Datos de demostración: una dependencia y una cuenta por rol
+	$(COMPOSE) exec backend python manage.py seed_demo
+
+e2e: ## Playwright: el trámite completo, de captura a resolución firmada
+	cd e2e && npm run test
+
+rename: ## Renombra el proyecto: make rename NAME=<slug>
+	./ops/ci/rename.py "$(NAME)"
+
+rename-check: ## Gate `rename`: copia el repo, lo renombra y exige que siga verde
+	./ops/ci/check-rename.sh
 
 designer: ## Construye sinpapel-designer en designer/dist/spa/
 	./ops/ci/build-designer.sh

@@ -11,6 +11,10 @@ from config.views import salud
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("salud/", salud, name="salud"),
+    # Autenticación para toda la plantilla de usuarios. El admin de Django solo
+    # deja entrar a cuentas `is_staff`, así que sin esto ni la persona
+    # solicitante ni ventanilla podrían iniciar sesión.
+    path("cuentas/", include("django.contrib.auth.urls")),
     # API de dominio: CRUD del trámite y catálogos. Va en su propio prefijo
     # para no colisionar con el SinpapelRouter, que publica el mismo modelo
     # bajo /sinpapel/api/ con sus acciones de workflow.

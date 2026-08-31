@@ -1,0 +1,73 @@
+{% load i18n %}<!DOCTYPE html>
+<html lang="es-MX">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Entrar — Sistema de trámites</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f4f5f7;
+        color: #1d1d1d;
+      }
+      form {
+        background: #fff;
+        padding: 2rem;
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+        width: min(24rem, 90vw);
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 1.5rem; }
+      label { display: block; margin-bottom: 1rem; font-size: 0.9rem; }
+      input[type="text"], input[type="password"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.6rem;
+        margin-top: 0.25rem;
+        border: 1px solid #c4c8cc;
+        border-radius: 4px;
+        font-size: 1rem;
+      }
+      button {
+        width: 100%;
+        padding: 0.7rem;
+        border: 0;
+        border-radius: 4px;
+        background: #3a4a5c;
+        color: #fff;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      .error { color: #d32f2f; font-size: 0.9rem; margin-bottom: 1rem; }
+    </style>
+  </head>
+  <body>
+    <form method="post">
+      {% csrf_token %}
+      <h1>Sistema de trámites</h1>
+
+      {% if form.errors %}
+        <p class="error">Usuario o contraseña incorrectos.</p>
+      {% endif %}
+
+      <label>
+        Usuario
+        <input type="text" name="username" autocomplete="username" autofocus required
+               id="id_username" value="{{ form.username.value|default:'' }}" />
+      </label>
+      <label>
+        Contraseña
+        <input type="password" name="password" autocomplete="current-password" required
+               id="id_password" />
+      </label>
+
+      <input type="hidden" name="next" value="{{ next }}" />
+      <button type="submit">Entrar</button>
+    </form>
+  </body>
+</html>

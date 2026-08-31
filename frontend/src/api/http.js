@@ -14,4 +14,10 @@ import axios from 'axios'
 export const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '',
   withCredentials: true,
+  // Django nombra la cookie `csrftoken` y espera la cabecera `X-CSRFToken`;
+  // axios trae por defecto los nombres de otro framework (`XSRF-TOKEN` /
+  // `X-XSRF-TOKEN`), así que sin esto NINGÚN POST funciona: el servidor
+  // responde 403 "CSRF token missing" aunque la cookie esté presente.
+  xsrfCookieName: 'csrftoken',
+  xsrfHeaderName: 'X-CSRFToken',
 })

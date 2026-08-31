@@ -59,6 +59,29 @@ jobs:
         # levantar compose.
         run: make verify
 
+      - name: Gate rename
+        # Aparte de `make verify`: monta un entorno completo desde cero.
+        run: make rename-check
+
+      - name: Instalar Chromium para el e2e
+        run: cd e2e && npm ci && npx playwright install --with-deps chromium
+
+      - name: Gate e2e
+        # Necesita el stack real: es la única prueba que ejercita a la vez el
+        # frontend, el proxy, la sesión, el CSRF y el motor.
+        run: |
+          make up
+          make seed
+          make e2e
+
+      - name: Artefactos del e2e
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
       - name: Verificar que las skills vendorizadas están sincronizadas
         # .claude/skills/ nunca se edita a mano: si el sync produce un diff,
         # alguien lo tocó o el repo canónico avanzó sin actualizar aquí.

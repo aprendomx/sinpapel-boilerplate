@@ -21,6 +21,13 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-inseguro-cambiar-en-produccio
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
+# Orígenes desde los que se aceptan peticiones con efectos (POST, PUT, DELETE).
+# Hace falta siempre que el navegador hable con un origen distinto del `Host`
+# que ve Django: es exactamente lo que ocurre con el proxy del dev server, que
+# reescribe el Host al del contenedor. Sin esto, Django rechaza cada POST con
+# "Origin checking failed" y el frontend no puede ni iniciar sesión.
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
 # ─── Apps ────────────────────────────────────────────────────────────────────
 # El orden importa (ver skill sinpapel-project-setup):
 #   simple_history antes de sinpapel  — registra los modelos históricos.
@@ -87,7 +94,7 @@ TEMPLATES = [
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
-        default="postgres://sinpapel:sinpapel@localhost:5432/sinpapel",
+        default="postgres://sinpapel_boilerplate:sinpapel_boilerplate@localhost:5432/sinpapel_boilerplate",
     )
 }
 
@@ -102,6 +109,11 @@ AUTH_PASSWORD_VALIDATORS = [
 # después es costoso. Requiere sinpapel>=0.8.3 / sinpapel-webhooks>=0.2.4,
 # que declaran sus FKs con settings.AUTH_USER_MODEL.
 AUTH_USER_MODEL = "cuentas.Usuario"
+
+# Tras iniciar o cerrar sesión se vuelve a la SPA, no al admin.
+LOGIN_URL = "/cuentas/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/cuentas/login/"
 
 LANGUAGE_CODE = "es-mx"
 TIME_ZONE = env("DJANGO_TIME_ZONE", default="America/Mexico_City")

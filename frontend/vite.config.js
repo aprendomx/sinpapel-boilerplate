@@ -21,7 +21,7 @@ export default defineConfig({
     // El target sale del entorno porque cambia según dónde corra Vite: en
     // Docker el backend es el servicio `backend`, fuera es localhost.
     proxy: Object.fromEntries(
-      ['/api', '/sinpapel', '/salud', '/reports', '/admin', '/static'].map((ruta) => [
+      ['/api', '/sinpapel', '/salud', '/reports', '/admin', '/cuentas', '/static'].map((ruta) => [
         ruta,
         { target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000', changeOrigin: true },
       ]),

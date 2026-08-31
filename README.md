@@ -56,6 +56,13 @@ de ser el declarado en el repositorio y nada más lo detectaría.
 | `coverage` | Cobertura mínima del 85 % en `apps/tramite_ejemplo` |
 | `audit` | `pip-audit`, `npm audit` y la integridad de los pines del ecosistema |
 
+Dos gates corren aparte porque tardan minutos:
+
+| Gate | Cómo |
+|---|---|
+| `e2e` | `make up && make seed && make e2e` — el trámite completo por la UI real |
+| `rename` | `make rename-check` — copia el repo, lo renombra y exige que siga verde |
+
 Los gates crecen con el proyecto: un target aparece en el Makefile cuando lo
 que verifica existe. No hay objetivos decorativos que pasen sin comprobar nada.
 
@@ -76,7 +83,7 @@ que verifica existe. No hay objetivos decorativos que pasen sin comprobar nada.
 │   └── tests/{unit,api,parity}/
 ├── frontend/           Vue 3 + Quasar + Vite + Pinia + @aprendomx/sinpapel-vue
 ├── designer/           sinpapel-designer embebido (make designer)
-├── e2e/                Playwright
+├── e2e/                Playwright (trámite completo)
 └── ops/{docker,ci,deploy}/
 ```
 
@@ -86,7 +93,7 @@ Pineadas y verificadas. El gate `audit` falla si cambian sin actualizar
 `ops/ci/check-pins.sh` y `spec/decisiones/`.
 
 ```
-sinpapel~=0.8.3          Django>=5.2,<6.0
+sinpapel~=0.8.4          Django>=5.2,<6.0
 sinpapel-drf~=0.4.5      Python 3.12
 sinpapel-webhooks~=0.2.4
 sinpapel-reports~=0.2.4

@@ -12,7 +12,7 @@ cd "$(dirname "$0")/../.."
 fallos=0
 
 esperado_py=(
-  'sinpapel~=0.8.3'
+  'sinpapel~=0.8.4'
   'sinpapel-drf~=0.4.5'
   'sinpapel-webhooks~=0.2.4'
   'sinpapel-reports~=0.2.4'
