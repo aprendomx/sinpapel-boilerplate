@@ -14,7 +14,7 @@ dependencies = [
     "sinpapel-webhooks~=0.2.4",
     "sinpapel-reports~=0.2.4",
     "psycopg[binary]>=3.2,<4.0",
-    "django-environ>=0.11,<0.13",
+    "django-environ>=0.11,<0.15",
     "gunicorn>=23.0,<24.0",
 ]
 
