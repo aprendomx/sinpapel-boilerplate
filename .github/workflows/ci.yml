@@ -34,19 +34,19 @@ jobs:
       DJANGO_SECRET_KEY: ci-no-usar-en-produccion
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           # Pineada a propósito: sin esto el CI instala la última uv, y el
@@ -91,7 +91,7 @@ jobs:
 
       - name: Artefactos del e2e
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: e2e/playwright-report/

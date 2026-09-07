@@ -27,9 +27,9 @@ jobs:
   designer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -38,7 +38,7 @@ jobs:
 
       - name: Avisar si el build dejó de funcionar
         if: failure() && github.event_name == 'schedule'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const titulo = 'El build del designer dejó de funcionar'
@@ -87,19 +87,19 @@ jobs:
       DJANGO_SECRET_KEY: ci-no-usar-en-produccion
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           version: "0.10.10"
@@ -148,7 +148,7 @@ jobs:
 
       - name: Avisar de lo que rompe
         if: failure() && github.event_name == 'schedule'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const titulo = 'Django 6 rompe la suite'
