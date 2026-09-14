@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@quasar/extras": "^1.16.0",
+    "@quasar/extras": "^2.0.4",
     "@quasar/vite-plugin": "^1.7.0",
     "@vitejs/plugin-vue": "^5.2.0",
     "@vue/test-utils": "^2.4.6",
