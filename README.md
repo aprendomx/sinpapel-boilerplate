@@ -190,8 +190,6 @@ CI falla si divergen.
 
 ## Licencia
 
-Copyright (C) 2024-2026 Julio Adrián <jadrian.s@gmail.com>
-
 Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo los
 términos de la GNU General Public License publicada por la Free Software
 Foundation, en su versión 3 o (a tu elección) cualquier versión posterior.
